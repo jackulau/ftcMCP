@@ -7,6 +7,7 @@ import { GRADLE_KNOWLEDGE } from "../knowledge/gradle.js";
 import { ROADRUNNER_KNOWLEDGE } from "../knowledge/roadrunner.js";
 import { FTCLIB_KNOWLEDGE } from "../knowledge/ftclib.js";
 import { VISION_KNOWLEDGE } from "../knowledge/vision.js";
+import { PANELS_KNOWLEDGE } from "../knowledge/panels.js";
 
 export function registerResources(server: McpServer): void {
   // ── Core SDK (FTC_SDK_KNOWLEDGE) ──────────────────────────────────────
@@ -777,6 +778,104 @@ export function registerResources(server: McpServer): void {
         uri: uri.href,
         mimeType: "text/plain",
         text: VISION_KNOWLEDGE.visionPatterns
+      }]
+    })
+  );
+
+  // ── Panels (PANELS_KNOWLEDGE) ─────────────────────────────────────────
+
+  server.resource(
+    "Panels Overview",
+    "ftc://panels/overview",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.overview
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Setup",
+    "ftc://panels/setup",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.setup
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Configurables",
+    "ftc://panels/configurables",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.configurables
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Telemetry",
+    "ftc://panels/telemetry",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.telemetry
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Field Drawing",
+    "ftc://panels/field",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.field
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Limelight",
+    "ftc://panels/limelight",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.limelight
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Plugins",
+    "ftc://panels/plugins",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.plugins
+      }]
+    })
+  );
+
+  server.resource(
+    "Panels Gamepads",
+    "ftc://panels/gamepads",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: PANELS_KNOWLEDGE.gamepads
       }]
     })
   );

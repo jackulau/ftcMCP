@@ -253,9 +253,32 @@ maven { url = "https://mymaven.bylazar.com/releases" }
 \`\`\`groovy
 implementation 'com.pedropathing:ftc:2.0.6'
 implementation 'com.pedropathing:telemetry:1.0.0'
-implementation 'com.bylazar:fullpanels:1.0.9'
+implementation 'com.bylazar:fullpanels:1.0.12'
 \`\`\`
 **Note:** Pedro Pathing requires \`compileSdk 34\` in \`build.common.gradle\`.
+
+---
+
+### Panels by Lazar (All-in-One FTC Dashboard)
+**Repository:**
+\`\`\`groovy
+maven { url = 'https://mymaven.bylazar.com/releases' }
+\`\`\`
+**Dependencies (Full — all plugins):**
+\`\`\`groovy
+implementation 'com.bylazar:fullpanels:1.0.12'
+\`\`\`
+**Dependencies (Core only — no built-in plugins):**
+\`\`\`groovy
+implementation 'com.bylazar:panels:1.0.5'
+\`\`\`
+**Notes:**
+- Requires \`compileSdk 34\` or higher
+- Requires Kotlin plugin (\`org.jetbrains.kotlin.android\`) with \`jvmTarget = '11'\`
+- This is an **alternative to FTC Dashboard** — do NOT install both
+- Shares the same Maven repo as Pedro Pathing (\`mymaven.bylazar.com/releases\`)
+- Website: https://panels.bylazar.com
+- GitHub: https://github.com/ftcontrol/ftcontrol-panels
 
 ---
 

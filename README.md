@@ -86,7 +86,7 @@ claude mcp add ftc -- node /path/to/ftcMCP/build/index.js
 
 ## What It Provides
 
-### 41 Resources (Documentation)
+### 49 Resources (Documentation)
 
 Contextual docs the AI pulls in when writing FTC code:
 
@@ -94,6 +94,7 @@ Contextual docs the AI pulls in when writing FTC code:
 |----------|-----------|----------|
 | **Pedro Pathing 2.0** | 6 | Complete API (Follower, PathBuilder, PathChain, BezierLine/Curve), Constants builder pattern, coordinate system [0,144], auto FSM structure, TeleOp drive, callbacks |
 | **FTC Dashboard** | 6 | `@Config` + `public static` pattern, copy semantics pitfall, MultipleTelemetry, TelemetryPacket, Canvas field overlay API, camera streaming, setup |
+| **Panels (by Lazar)** | 8 | Overview & comparison with FTC Dashboard, setup & Gradle config, `@Configurable` live tuning, `PanelsTelemetry`, `PanelsField` canvas drawing, Limelight proxy, plugin architecture, gamepad support |
 | **Gradle** | 5 | Project file structure, adding libraries step-by-step, exact Maven coordinates for every library, common issues (compileSdk 34 for Pedro), build process |
 | **Hardware** | 17 | DcMotor/DcMotorEx full API, RunModes, motor specs (every goBILDA/REV CPR), servos, IMU, distance/color/touch sensors, encoders (port 0+3 vs 1+2), GoBilda Pinpoint, SparkFun OTOS, REV Hub internals, bulk reads, CachingHardware, custom wrapper patterns, VisionPortal + Limelight |
 | **Core SDK** | 5 | OpMode lifecycle (iterative vs linear), hardwareMap patterns, gamepad API, best practices |
@@ -150,6 +151,7 @@ Structured instructions that guide the AI through complex FTC tasks:
 | [FTC SDK](https://github.com/FIRST-Tech-Challenge/FtcRobotController) | 11.1.0 | Full hardware API, OpMode lifecycle, gamepad, telemetry |
 | [Pedro Pathing](https://pedropathing.com/) | 2.0.6 | Complete v2.0 API with builder patterns (NOT the outdated v1.x) |
 | [FTC Dashboard](https://github.com/acmerobotics/ftc-dashboard) | 0.5.1 | @Config, MultipleTelemetry, Canvas, camera streaming |
+| [Panels](https://panels.bylazar.com) | 1.0.12 | @Configurable, PanelsTelemetry, PanelsField, Limelight proxy, plugin architecture, gamepads, capture/replay |
 | [Road Runner](https://rr.brott.dev/) | 1.0.x | Actions API, TrajectoryActionBuilder |
 | [CachingHardware](https://github.com/Dairy-Foundation/CachingHardware) | 1.0.0 | Write caching algorithm, drop-in wrappers |
 | [FTCLib](https://docs.ftclib.org/) | 2.1.1 | Command-based framework, GamepadEx |
@@ -192,6 +194,7 @@ ftc-mcp/
 │   │   ├── examples.ts           # 10 complete code examples (1,396 lines)
 │   │   ├── ftc-sdk.ts            # SDK patterns (881 lines)
 │   │   ├── dashboard.ts          # FTC Dashboard (845 lines)
+│   │   ├── panels.ts             # Panels by Lazar — all-in-one dashboard
 │   │   ├── ftclib.ts             # FTCLib framework (636 lines)
 │   │   ├── gradle.ts             # Gradle build system (584 lines)
 │   │   └── roadrunner.ts         # Road Runner (478 lines)

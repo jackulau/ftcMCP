@@ -11,6 +11,7 @@ import { GRADLE_KNOWLEDGE } from "../knowledge/gradle.js";
 import { ROADRUNNER_KNOWLEDGE } from "../knowledge/roadrunner.js";
 import { FTCLIB_KNOWLEDGE } from "../knowledge/ftclib.js";
 import { VISION_KNOWLEDGE } from "../knowledge/vision.js";
+import { PANELS_KNOWLEDGE } from "../knowledge/panels.js";
 import { EXAMPLES } from "../knowledge/examples.js";
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ function getJavaFiles(dir: string): string[] {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         results.push(...getJavaFiles(fullPath));
-      } else if (entry.name.endsWith(".java")) {
+      } else if (entry.name.endsWith(".java") || entry.name.endsWith(".kt")) {
         results.push(fullPath);
       }
     }
@@ -76,6 +77,7 @@ export function registerTools(server: McpServer): void {
         const libraries: Record<string, boolean> = {
           pedropathing: false,
           dashboard: false,
+          panels: false,
           roadrunner: false,
           cachinghardware: false,
           ftclib: false,
@@ -85,6 +87,7 @@ export function registerTools(server: McpServer): void {
           const depsLower = depsGradle.toLowerCase();
           if (depsLower.includes("pedropathing")) libraries.pedropathing = true;
           if (depsLower.includes("dashboard")) libraries.dashboard = true;
+          if (depsLower.includes("fullpanels") || depsLower.includes("com.bylazar")) libraries.panels = true;
           if (depsLower.includes("roadrunner")) libraries.roadrunner = true;
           if (depsLower.includes("cachinghardware")) libraries.cachinghardware = true;
           if (depsLower.includes("ftclib")) libraries.ftclib = true;
@@ -110,6 +113,7 @@ export function registerTools(server: McpServer): void {
         let usesSolversLib = false;
         let usesFtcLib = false;
         let usesCommandBase = false;
+        let usesPanels = false;
         let hasFollowerConstants = false;
         let hasMecanumConstants = false;
 
@@ -168,6 +172,9 @@ export function registerTools(server: McpServer): void {
             // Road Runner imports
             if (content.includes("com.acmerobotics.roadrunner")) usesRoadRunner = true;
 
+            // Panels imports
+            if (content.includes("com.bylazar.panels") || content.includes("com.bylazar.telemetry") || content.includes("com.bylazar.configurables") || content.includes("com.bylazar.field")) usesPanels = true;
+
             // SolversLib imports
             if (content.includes("com.seattlesolvers.solverslib")) usesSolversLib = true;
 
@@ -208,6 +215,7 @@ export function registerTools(server: McpServer): void {
         result.usesSolversLib = usesSolversLib;
         result.usesFtcLib = usesFtcLib;
         result.usesCommandBase = usesCommandBase;
+        result.usesPanels = usesPanels;
         result.hasFollowerConstants = hasFollowerConstants;
         result.hasMecanumConstants = hasMecanumConstants;
 
@@ -341,7 +349,7 @@ export function registerTools(server: McpServer): void {
     "Search the FTC knowledge base for documentation matching a query. Returns the most relevant sections.",
     {
       query: z.string().describe("Search query"),
-      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, vision, all. Covers build/deploy, IDE setup, ADB, dev environment, VisionPortal, AprilTag, Limelight, color detection, and vision optimization."),
+      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, panels, gradle, hardware, performance, command-base, ftclib, vision, all. Covers build/deploy, IDE setup, ADB, dev environment, VisionPortal, AprilTag, Limelight, color detection, vision optimization, and Panels dashboard."),
     },
     async ({ query, category }) => {
       // Build search index from all knowledge modules
@@ -370,6 +378,9 @@ export function registerTools(server: McpServer): void {
       }
       for (const [key, content] of Object.entries(VISION_KNOWLEDGE)) {
         index.push({ category: "vision", key, content });
+      }
+      for (const [key, content] of Object.entries(PANELS_KNOWLEDGE)) {
+        index.push({ category: "panels", key, content });
       }
 
       // Split query into lowercase words
@@ -402,7 +413,7 @@ export function registerTools(server: McpServer): void {
         return {
           content: [{
             type: "text" as const,
-            text: `No matches found for query: "${query}"${category ? ` in category: ${category}` : ""}.\n\nAvailable categories: sdk, pedro, roadrunner, dashboard, gradle, hardware, ftclib, all`,
+            text: `No matches found for query: "${query}"${category ? ` in category: ${category}` : ""}.\n\nAvailable categories: sdk, pedro, roadrunner, dashboard, panels, gradle, hardware, ftclib, vision, all`,
           }],
         };
       }
