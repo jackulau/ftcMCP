@@ -475,6 +475,42 @@ export function registerResources(server: McpServer): void {
   );
 
   server.resource(
+    "Command Pipeline",
+    "ftc://hardware/command-pipeline",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: HARDWARE_KNOWLEDGE.commandPipeline
+      }]
+    })
+  );
+
+  server.resource(
+    "Write Optimization",
+    "ftc://hardware/write-optimization",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: HARDWARE_KNOWLEDGE.writeOptimization
+      }]
+    })
+  );
+
+  server.resource(
+    "Loop Time Budget",
+    "ftc://hardware/loop-time-budget",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: HARDWARE_KNOWLEDGE.loopTimeBudget
+      }]
+    })
+  );
+
+  server.resource(
     "Vision",
     "ftc://hardware/vision",
     async (uri) => ({

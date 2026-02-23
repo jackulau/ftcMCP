@@ -1476,4 +1476,490 @@ public class AprilTagDrive extends LinearOpMode {
 }
 \`\`\`
 `,
+
+  commandPipeline: `
+## The LynxCommand Pipeline — How Hardware Communication Actually Works
+
+Understanding the USB command pipeline is critical for writing fast FTC code. Every
+millisecond matters when your loop needs to run at 100+ Hz.
+
+### How Every Hardware Call Becomes a USB Command
+
+When you call \`motor.setPower(0.5)\`, the SDK does NOT directly talk to the motor.
+Instead, it creates a **LynxCommand** — a serialized packet sent over USB (Expansion Hub)
+or UART (Control Hub) to the REV Hub's ARM Cortex M4 microprocessor.
+
+\`\`\`
+Your Java Code         SDK Internal           REV Hub Firmware
+─────────────        ─────────────────       ─────────────────
+motor.setPower(0.5) → LynxSetMotorPowerCmd → UART/USB → ARM M4 → H-Bridge PWM update
+motor.getPosition() → LynxGetBulkInputData → UART/USB → ARM M4 → Encoder register read
+servo.setPosition() → LynxSetServoPosition → UART/USB → ARM M4 → Servo PWM update
+\`\`\`
+
+### Command Timing — The Fundamental Constraint
+
+Every LynxCommand is a **blocking round-trip**:
+1. SDK sends the command packet over UART/USB
+2. Hub firmware receives, processes, and sends a response
+3. SDK reads the response and returns to your code
+
+| Connection Type | Latency per Command | Notes |
+|---|---|---|
+| Control Hub (UART) | ~2 ms | Direct internal UART to Lynx board |
+| Expansion Hub (USB) | ~3 ms | USB → FTDI → UART → Lynx board |
+| Expansion Hub (RS-485) | ~3-4 ms | Goes through parent hub first, then RS-485 |
+
+### The Master Lock — Why Multithreading Doesn't Help
+
+The SDK holds a **mutex lock per USB device** (per physical hub connection). This means:
+
+\`\`\`
+Thread A: motor1.setPower(0.5)  ─── acquires lock ─── sends cmd ─── waits ─── releases lock
+Thread B: motor2.setPower(0.8)  ─── BLOCKED waiting ──────────── acquires lock ─── sends ─── ...
+\`\`\`
+
+**All commands to the same hub are serialized**, regardless of how many threads you use.
+Multithreading hardware calls is AT BEST useless and typically HARMFUL (adds thread
+scheduling overhead on top of the serial USB bottleneck).
+
+**Exception:** If you have TWO hubs (Control Hub + Expansion Hub) on separate USB
+connections, commands to different hubs CAN execute in parallel because they have
+separate locks. But this is an unusual optimization and adds significant complexity.
+
+### Command Count = Loop Time
+
+Your loop time is approximately:
+
+\`\`\`
+loop_time ≈ (num_commands × latency_per_command) + compute_time
+
+Example — Unoptimized mecanum TeleOp on Control Hub:
+  4 × setPower()           = 4 × 2ms = 8ms   (motor writes)
+  4 × getCurrentPosition() = 4 × 2ms = 8ms   (encoder reads — WITHOUT bulk read)
+  1 × setPosition()        = 1 × 2ms = 2ms   (servo write)
+  1 × IMU read             = 1 × 7ms = 7ms   (I2C — not bulk-readable)
+  ─────────────────────────────────────────
+  Total USB time:                     ≈ 25ms  (40 Hz)
+
+Example — Optimized with bulk reads + caching:
+  1 × clearBulkCache()     = 1 × 2ms = 2ms   (bulk read — all encoders at once)
+  2 × setPower() (changed) = 2 × 2ms = 4ms   (only 2 of 4 motors changed power)
+  0 × setPosition()        = 0ms              (servo value unchanged — cached)
+  1 × IMU read             = 1 × 7ms = 7ms   (I2C — still slow)
+  ─────────────────────────────────────────
+  Total USB time:                     ≈ 13ms  (77 Hz)
+\`\`\`
+
+### What Bulk Read Actually Does Internally
+
+A bulk read is a single LynxCommand (\`LynxGetBulkInputDataCommand\`) that returns:
+- All 4 encoder positions
+- All 4 encoder velocities
+- All 8 digital input states
+- All 4 analog input values
+- All 4 motor overcurrent flags
+
+**One USB round-trip (~2ms) replaces up to 20 individual reads.**
+
+### What Bulk Read Does NOT Include
+- I2C sensor data (IMU, color sensor, distance sensor) — always separate commands
+- Motor current draw (\`getCurrent()\`) — separate command
+- Servo position readback — no readback exists; servos are write-only
+- Any device on a different hub — each hub needs its own bulk read
+
+### I2C Commands Are Multi-Step
+
+Reading an I2C sensor (IMU, color, distance, Pinpoint, OTOS) requires multiple
+LynxCommands internally:
+1. \`LynxI2cWriteSingleByteCommand\` — set register pointer
+2. \`LynxI2cReadStatusQueryCommand\` — poll for completion (may repeat)
+3. \`LynxI2cReadMultipleBytesCommand\` — read the result
+
+This is why a single I2C read takes ~7ms on USB (3+ LynxCommands) but only
+~3ms on the Control Hub's faster UART + higher polling rate (SDK 5.5+).
+
+**I2C buses are independent.** Each hub has 4 I2C buses. Sensors on different
+buses can be read without additional contention (though they still share the
+USB master lock). Distribute sensors across buses to minimize blocking.
+`,
+
+  writeOptimization: `
+## Hardware Write Optimization — Beyond Caching
+
+### The Write Problem
+
+There is **no bulk write** in the FTC SDK. Unlike bulk reads (which batch all sensor
+reads into one USB command), each motor and servo write is a separate LynxCommand:
+
+\`\`\`java
+// This is 4 separate USB commands = 4 × 2ms = 8ms
+fl.setPower(0.5);  // LynxSetMotorConstantPowerCommand(port=0, power=0.5)
+fr.setPower(0.5);  // LynxSetMotorConstantPowerCommand(port=1, power=0.5)
+bl.setPower(0.5);  // LynxSetMotorConstantPowerCommand(port=2, power=0.5)
+br.setPower(0.5);  // LynxSetMotorConstantPowerCommand(port=3, power=0.5)
+\`\`\`
+
+Since you can't batch writes, the optimization strategy is to **minimize the
+number of writes that actually get sent**.
+
+### Strategy 1: CachingHardware (Write Suppression)
+
+The Dairy Foundation's CachingHardware library wraps motors and servos to skip
+writes when the value hasn't changed significantly.
+
+\`\`\`java
+// Without caching: 4 setPower() calls = 4 USB commands every loop
+// With caching: only sends commands when power actually changes
+
+CachingDcMotorEx fl = new CachingDcMotorEx(hardwareMap.get(DcMotorEx.class, "fl"));
+// fl.setPower(0.5) → sends USB command
+// fl.setPower(0.5) → SKIPPED (same value)
+// fl.setPower(0.51) → SKIPPED (within 0.005 tolerance)
+// fl.setPower(0.7) → sends USB command (changed enough)
+\`\`\`
+
+**Impact:** In steady-state driving (cruising at constant speed), this can eliminate
+3-4 motor writes per loop, saving 6-8ms.
+
+### Strategy 2: Hub-Aware Write Grouping
+
+If you use both a Control Hub and an Expansion Hub, group your writes by hub.
+Commands to different hubs are on different USB buses and can technically be
+issued without waiting for the other hub's response.
+
+\`\`\`
+// GOOD: Group by hub — minimizes context switching
+controlHubMotor1.setPower(p1);   // Control Hub
+controlHubMotor2.setPower(p2);   // Control Hub
+expansionHubMotor1.setPower(p3); // Expansion Hub
+expansionHubMotor2.setPower(p4); // Expansion Hub
+
+// ALSO FINE: Order doesn't matter much with the master lock
+// The SDK serializes everything regardless
+// But grouping helps with mental model and debugging
+\`\`\`
+
+**Practical tip:** Put all 4 drive motors on the SAME hub (Control Hub preferred
+for lower latency). This ensures drive commands share one bulk read and all
+drivetrain-related USB traffic goes through the faster UART path.
+
+### Strategy 3: Odd/Even Frame Splitting
+
+For non-critical hardware that doesn't need updating every single loop, alternate
+which devices get written on odd vs even frames.
+
+\`\`\`java
+private int loopCount = 0;
+
+@Override
+public void loop() {
+    clearBulkCache();
+    loopCount++;
+
+    // EVERY frame: drivetrain (critical — always update)
+    fl.setPower(flPower);
+    fr.setPower(frPower);
+    bl.setPower(blPower);
+    br.setPower(brPower);
+
+    // ODD frames only: lift motor
+    if (loopCount % 2 == 1) {
+        lift.setPower(liftPower);
+    }
+
+    // EVEN frames only: intake + servo
+    if (loopCount % 2 == 0) {
+        intake.setPower(intakePower);
+        claw.setPosition(clawPos);
+    }
+
+    // Every 5th frame: LED indicator, telemetry
+    if (loopCount % 5 == 0) {
+        telemetry.update();
+    }
+}
+\`\`\`
+
+**Impact:** Splitting 2 non-critical writes to alternate frames saves ~4ms every
+frame. The mechanism still updates at 50Hz+ which is more than adequate for
+lifts, intakes, and servos.
+
+### Strategy 4: I2C Read Throttling
+
+I2C reads (IMU, color, distance sensors) are the most expensive operations.
+Throttle them to only read when the data is actually needed.
+
+\`\`\`java
+// BAD: Read IMU every loop (7ms wasted most loops)
+double heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+
+// GOOD: Read IMU only when heading is needed for field-centric calc
+private double cachedHeading = 0;
+private long lastImuReadMs = 0;
+private static final long IMU_READ_INTERVAL_MS = 50; // 20 Hz is plenty
+
+private double getHeading() {
+    long now = System.currentTimeMillis();
+    if (now - lastImuReadMs >= IMU_READ_INTERVAL_MS) {
+        cachedHeading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+        lastImuReadMs = now;
+    }
+    return cachedHeading;
+}
+\`\`\`
+
+**Impact:** Reading the IMU at 20Hz instead of 100Hz saves ~5.6ms per loop
+(7ms × 0.8 loops where the read is skipped).
+
+**Better alternative:** Use a GoBilda Pinpoint or SparkFun OTOS for odometry.
+These devices give you heading + position via I2C but with much less
+per-read overhead because they do sensor fusion onboard.
+
+### Strategy 5: Eliminate RunMode and ZeroPowerBehavior Redundancy
+
+The SDK sends a LynxCommand when you call \`setMode()\` or \`setZeroPowerBehavior()\`
+even if the value hasn't changed. Cache these yourself:
+
+\`\`\`java
+private DcMotor.RunMode currentMode = null;
+
+public void setModeCached(DcMotor.RunMode mode) {
+    if (mode != currentMode) {
+        motor.setMode(mode);
+        currentMode = mode;
+    }
+    // If mode is already set, this is FREE (no USB command)
+}
+\`\`\`
+
+### Strategy 6: Telemetry Throttling
+
+\`telemetry.update()\` sends data over WiFi to the Driver Station. While not a USB
+command, it consumes CPU time and can add 1-5ms per call.
+
+\`\`\`java
+// Throttle to every 5th or 10th loop
+if (loopCount % 10 == 0) {
+    telemetry.addData("Loop (ms)", loopTimer.milliseconds());
+    telemetry.update();
+}
+\`\`\`
+
+### Summary: Write Optimization Checklist
+
+| Strategy | Saves | Difficulty |
+|---|---|---|
+| CachingHardware wrappers | 4-8ms/loop | Easy (drop-in) |
+| I2C read throttling | 5-7ms/loop | Easy |
+| Odd/even frame splitting | 2-6ms/loop | Medium |
+| RunMode/ZPB caching | 0-4ms/loop | Easy |
+| Telemetry throttling | 1-5ms/loop | Trivial |
+| Hub-aware device placement | 2-4ms/loop | Planning |
+
+**Combined impact:** An unoptimized loop at 30-50ms can typically be reduced
+to 5-12ms (80-200 Hz) using these strategies together.
+`,
+
+  loopTimeBudget: `
+## Loop Time Budget — Where Every Millisecond Goes
+
+### Anatomy of a Single Loop Iteration
+
+\`\`\`
+┌─────────────────────────────────────────────────────────────────┐
+│                     ONE LOOP ITERATION                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. clearBulkCache()         │ ~2ms  │ One bulk read from hub   │
+│  2. Read gamepad inputs      │ ~0ms  │ Local memory (cached)    │
+│  3. Compute drive powers     │ ~0ms  │ CPU math (negligible)    │
+│  4. setPower() × 4 motors    │ 4-8ms │ 4 USB writes (or fewer  │
+│     (with CachingHardware)   │ 0-4ms │  if values unchanged)   │
+│  5. Read encoders (cached)   │ ~0ms  │ Already in bulk cache    │
+│  6. Read IMU (I2C)           │ ~7ms  │ EXPENSIVE — throttle!    │
+│  7. Servo writes             │ 0-2ms │ Usually cached (0ms)     │
+│  8. PID computation          │ ~0ms  │ CPU math (negligible)    │
+│  9. Telemetry update         │ 1-5ms │ WiFi to Driver Station   │
+│                                                                 │
+│  TOTAL (unoptimized):        │ ~25ms │ = 40 Hz loop             │
+│  TOTAL (optimized):          │ ~8ms  │ = 125 Hz loop            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+\`\`\`
+
+### Detailed Timing Table
+
+| Operation | Control Hub | Expansion Hub | Bulk Readable? |
+|---|---|---|---|
+| Bulk read (clearBulkCache) | 2 ms | 3 ms | N/A (IS bulk read) |
+| Motor setPower() | 2 ms | 3 ms | N/A (write) |
+| Motor setMode() | 2 ms | 3 ms | N/A (write) |
+| Servo setPosition() | 2 ms | 3 ms | N/A (write) |
+| Encoder getPosition() | 0 ms* | 0 ms* | YES — in bulk cache |
+| Encoder getVelocity() | 0 ms* | 0 ms* | YES — in bulk cache |
+| Digital getState() | 0 ms* | 0 ms* | YES — in bulk cache |
+| Analog getVoltage() | 0 ms* | 0 ms* | YES — in bulk cache |
+| isOverCurrent() | 0 ms* | 0 ms* | YES — in bulk cache |
+| IMU getYaw() | 3 ms | 7 ms | NO — I2C |
+| Color sensor read | 3 ms | 7 ms | NO — I2C |
+| Distance sensor read | 3 ms | 7 ms | NO — I2C |
+| Pinpoint getPosition() | 3 ms | 7 ms | NO — I2C |
+| OTOS getPosition() | 3 ms | 7 ms | NO — I2C |
+| Motor getCurrent() | 2 ms | 3 ms | NO — separate command |
+| telemetry.update() | 1-5 ms | 1-5 ms | N/A (WiFi) |
+
+*After clearBulkCache() in MANUAL mode — reads from local cache (0ms).
+
+### Optimization Priority (Impact Ranking)
+
+1. **Bulk reads (MANUAL mode)** — saves 8-16ms by replacing N individual sensor
+   reads with 1 bulk command. This is the single highest-impact optimization.
+
+2. **I2C read throttling** — saves 5-7ms per avoided read. IMU/color/distance
+   sensors at 20Hz instead of 100Hz is usually sufficient.
+
+3. **CachingHardware wrappers** — saves 2-8ms by skipping redundant motor/servo
+   writes. Most impactful during steady-state (constant speed) operation.
+
+4. **Odd/even frame splitting** — saves 2-6ms by deferring non-critical mechanism
+   updates to alternating frames. Mechanisms still update at 50+ Hz.
+
+5. **Telemetry throttling** — saves 1-5ms. Update telemetry every 5-10 loops.
+
+6. **RunMode/ZPB caching** — saves 0-4ms. Avoid redundant setMode() calls.
+
+### Target Performance
+
+| Metric | Unoptimized | Acceptable | Good | Excellent |
+|---|---|---|---|---|
+| Loop time | 50-100 ms | 15-25 ms | 8-15 ms | < 8 ms |
+| Loop rate | 10-20 Hz | 40-67 Hz | 67-125 Hz | 125+ Hz |
+
+**Why loop speed matters:**
+- **Path following accuracy**: Pedro Pathing and Road Runner update their motion
+  controllers every loop. Faster loops = smoother, more accurate paths.
+- **PID responsiveness**: Faster PID loops = less overshoot, better disturbance rejection.
+- **Gamepad responsiveness**: Faster loops = less input lag, better driver feel.
+
+### Complete Optimized Loop Template
+
+\`\`\`java
+@Config
+@TeleOp(name = "Optimized TeleOp")
+public class OptimizedTeleOp extends OpMode {
+
+    // Dashboard-tunable
+    public static double SLOW_SPEED = 0.35;
+    public static int TELEMETRY_INTERVAL = 10;
+    public static long IMU_INTERVAL_MS = 50;
+
+    private List<LynxModule> allHubs;
+    private CachingDcMotorEx fl, fr, bl, br;
+    private CachingServo claw;
+    private IMU imu;
+
+    private double cachedHeading = 0;
+    private long lastImuRead = 0;
+    private int loopCount = 0;
+    private ElapsedTime loopTimer = new ElapsedTime();
+
+    @Override
+    public void init() {
+        // 1. Enable MANUAL bulk reads
+        allHubs = hardwareMap.getAll(LynxModule.class);
+        for (LynxModule hub : allHubs) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
+        }
+
+        // 2. Use CachingHardware wrappers
+        fl = new CachingDcMotorEx(hardwareMap.get(DcMotorEx.class, "fl"));
+        fr = new CachingDcMotorEx(hardwareMap.get(DcMotorEx.class, "fr"));
+        bl = new CachingDcMotorEx(hardwareMap.get(DcMotorEx.class, "bl"));
+        br = new CachingDcMotorEx(hardwareMap.get(DcMotorEx.class, "br"));
+        claw = new CachingServo(hardwareMap.get(Servo.class, "claw"));
+
+        // 3. IMU setup
+        imu = hardwareMap.get(IMU.class, "imu");
+        imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(
+            RevHubOrientationOnRobot.LogoFacingDirection.UP,
+            RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
+        imu.resetYaw();
+
+        telemetry = new MultipleTelemetry(telemetry,
+            FtcDashboard.getInstance().getTelemetry());
+    }
+
+    @Override
+    public void loop() {
+        loopTimer.reset();
+        loopCount++;
+
+        // === PHASE 1: Bulk read (one USB command for all sensors) ===
+        for (LynxModule hub : allHubs) {
+            hub.clearBulkCache();
+        }
+
+        // === PHASE 2: Reads (from bulk cache = free) ===
+        // Encoder positions, digital inputs, analog — all cached
+        int flPos = fl.getCurrentPosition(); // 0ms — from cache
+        int frPos = fr.getCurrentPosition(); // 0ms — from cache
+
+        // IMU — throttled (only read every 50ms)
+        long now = System.currentTimeMillis();
+        if (now - lastImuRead >= IMU_INTERVAL_MS) {
+            cachedHeading = imu.getRobotYawPitchRollAngles()
+                .getYaw(AngleUnit.RADIANS);
+            lastImuRead = now;
+        }
+
+        // === PHASE 3: Compute (CPU only — ~0ms) ===
+        double y  = -gamepad1.left_stick_y;
+        double x  =  gamepad1.left_stick_x * 1.1;
+        double rx =  gamepad1.right_stick_x;
+
+        // Field-centric rotation
+        double rotX = x * Math.cos(-cachedHeading) - y * Math.sin(-cachedHeading);
+        double rotY = x * Math.sin(-cachedHeading) + y * Math.cos(-cachedHeading);
+
+        double denom = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1);
+        double flP = (rotY + rotX + rx) / denom;
+        double frP = (rotY - rotX - rx) / denom;
+        double blP = (rotY - rotX + rx) / denom;
+        double brP = (rotY + rotX - rx) / denom;
+
+        // === PHASE 4: Writes (CachingHardware skips unchanged values) ===
+        fl.setPower(flP); // Only sends USB command if value changed
+        fr.setPower(frP);
+        bl.setPower(blP);
+        br.setPower(brP);
+
+        // Servo — CachingServo skips if position unchanged
+        if (gamepad1.a) claw.setPosition(0.6);
+        if (gamepad1.b) claw.setPosition(0.0);
+
+        // === PHASE 5: Telemetry (throttled) ===
+        if (loopCount % TELEMETRY_INTERVAL == 0) {
+            telemetry.addData("Loop (ms)", "%.1f", loopTimer.milliseconds());
+            telemetry.addData("Heading", "%.1f", Math.toDegrees(cachedHeading));
+            telemetry.addData("FL/FR", "%.2f / %.2f", flP, frP);
+            telemetry.update();
+        }
+    }
+}
+\`\`\`
+
+### Phase-Ordered Loop Pattern
+
+For maximum performance, order your loop operations in phases:
+
+1. **Bulk cache clear** — one USB command, gets fresh sensor data
+2. **Reads** — all from cache (0ms each), plus throttled I2C reads
+3. **Compute** — pure CPU math, negligible time
+4. **Writes** — motor/servo commands, minimized by CachingHardware
+5. **Telemetry** — throttled to every Nth loop
+
+This ordering ensures reads get fresh data, writes happen after all
+computations are complete, and telemetry doesn't block critical path.
+`,
 };

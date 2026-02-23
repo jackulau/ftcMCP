@@ -492,6 +492,21 @@ export function registerTools(server: McpServer): void {
         "apriltag":         ["vision"],
         "camera":           ["vision"],
         "optimization":     ["optimizationSummary"],
+        "pipeline":         ["commandPipeline"],
+        "command-pipeline": ["commandPipeline"],
+        "commandpipeline":  ["commandPipeline"],
+        "lynxcommand":      ["commandPipeline"],
+        "lynx-command":     ["commandPipeline"],
+        "usb":              ["commandPipeline"],
+        "write-optimization": ["writeOptimization"],
+        "writeoptimization":  ["writeOptimization"],
+        "write-caching":    ["writeOptimization", "cachingHardware"],
+        "queueing":         ["commandPipeline", "writeOptimization"],
+        "queuing":          ["commandPipeline", "writeOptimization"],
+        "loop-time":        ["loopTimeBudget"],
+        "looptime":         ["loopTimeBudget"],
+        "loop-budget":      ["loopTimeBudget"],
+        "performance":      ["optimizationSummary", "commandPipeline", "writeOptimization", "loopTimeBudget"],
       };
 
       const keys = deviceMapping[deviceLower];
@@ -510,6 +525,7 @@ export function registerTools(server: McpServer): void {
         "ColorSensor", "DistanceSensor", "TouchSensor",
         "bulk-reads", "caching-hardware", "custom-wrappers",
         "encoders", "rev-hub", "vision", "optimization",
+        "command-pipeline / queueing", "write-optimization", "loop-time / performance",
       ];
       return {
         content: [{
