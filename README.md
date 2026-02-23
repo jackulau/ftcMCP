@@ -6,40 +6,74 @@ MCP server that gives AI coding assistants deep knowledge of the FTC Robot Contr
 
 **The fix:** This MCP server injects 9,500+ lines of verified FTC documentation, API references, and working code examples directly into your AI assistant's context.
 
-## Quick Install
+## One-Click Install
+
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ftc&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImZ0Yy1tY3AiXX0%3D)
 
 ### Claude Code
 ```bash
 claude mcp add ftc -- npx ftc-mcp
 ```
 
-### Cursor
+### Cursor (Manual)
+
+> Or use the one-click button above.
+
 Add to `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
     "ftc": {
       "command": "npx",
-      "args": ["ftc-mcp"]
+      "args": ["-y", "ftc-mcp"]
     }
   }
 }
 ```
 
 ### VS Code (Copilot)
-Add to your MCP configuration:
+
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP_Server-007ACC?logo=visual-studio-code&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22ftc%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22ftc-mcp%22%5D%7D)
+
+Or add to `.vscode/mcp.json`:
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "ftc": {
       "command": "npx",
-      "args": ["ftc-mcp"]
+      "args": ["-y", "ftc-mcp"]
     }
   }
 }
 ```
 
-### Local Development (from source)
+### Windsurf
+Add to your Windsurf MCP config:
+```json
+{
+  "mcpServers": {
+    "ftc": {
+      "command": "npx",
+      "args": ["-y", "ftc-mcp"]
+    }
+  }
+}
+```
+
+### Any MCP Client (`.mcp.json`)
+Drop this file in your project root:
+```json
+{
+  "mcpServers": {
+    "ftc": {
+      "command": "npx",
+      "args": ["-y", "ftc-mcp"]
+    }
+  }
+}
+```
+
+### From Source
 ```bash
 git clone https://github.com/jackulau/ftcMCP.git
 cd ftcMCP
