@@ -415,7 +415,97 @@ Important: Remind the user that Dashboard serves a web UI at http://192.168.43.1
     }
   );
 
-  // ── 8. Setup Gradle ───────────────────────────────────────────────────
+  // ── 8. Command-Based Project Setup ──────────────────────────────────
+
+  server.prompt(
+    "setup-command-based",
+    "Set up a command-based FTC project using SolversLib with subsystems, commands, and gamepad bindings",
+    {
+      pathingLibrary: z.string().optional().describe("pedro or roadrunner"),
+      subsystems: z.string().optional().describe("Comma-separated subsystem names, e.g., lift, claw, intake, arm"),
+    },
+    async (args) => {
+      const pathing = args.pathingLibrary ?? "pedro";
+      const subsystems = args.subsystems ?? "not specified";
+
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Set up a command-based FTC project using SolversLib:
+- Pathing library: ${pathing}
+- Subsystems: ${subsystems}
+
+Follow these steps:
+
+1. Call scan_ftc_project to analyze the current project state.
+
+2. Read the command-base resources:
+   - ftc://command-base/setup — SolversLib vs FTCLib, Gradle installation, import mapping
+   - ftc://command-base/api — CommandOpMode, SubsystemBase, CommandBase, built-in command types, composition
+   - ftc://command-base/organization — recommended directory structure, Constants pattern, Robot container
+   - ftc://command-base/subsystems — PID-controlled subsystems, servo subsystems, voltage compensation, cross-subsystem dependencies
+   - ftc://command-base/commands — atomic, timed, instant, persistent, macro, conditional patterns
+   - ftc://command-base/triggers — GamepadEx, button bindings, trigger bindings, default commands
+
+3. Set up Gradle for SolversLib:
+   - Read ftc://gradle/adding-libraries for the process
+   - Add \`maven { url = "https://repo.dairy.foundation/releases" }\` to repositories
+   - Add \`implementation "org.solverslib:core:0.3.4"\` to dependencies
+   - IMPORTANT: Do NOT also add FTCLib — they cannot coexist
+${pathing === "pedro" ? `   - Also add Pedro Pathing dependencies and set compileSdk to 34
+   - Read ftc://command-base/pedro-integration for Pedro + command-base integration patterns` : `   - Also add Road Runner dependencies`}
+
+4. Create the project structure:
+   - Constants/ — @Config classes for each subsystem's tunable values
+   - subsystems/ — SubsystemBase classes with PID in periodic()
+   - commands/custom/ — atomic commands (one per file)
+   - commands/group/ — composite SequentialCommandGroup/ParallelCommandGroup
+   - opmode/teleop/ — CommandOpMode TeleOp with button bindings
+   - opmode/auton/ — CommandOpMode autonomous with path following
+   - lib/ — Robot container class, utilities
+
+5. Create the Robot container class:
+   - Constructs all subsystems
+   - Enables bulk reads (or use CommandScheduler.getInstance().setBulkCacheMode())
+   - Provides subsystem instances to OpModes
+
+6. Create the subsystem classes:
+   - Each extends SubsystemBase
+   - PID control in periodic() — commands just set targets
+   - All tunable values as @Config public static
+   - register() in constructor
+
+7. Create atomic commands:
+   - LiftToPositionCommand (set target, wait for convergence)
+   - DefaultDriveCommand (persistent, reads gamepad suppliers)
+${pathing === "pedro" ? `   - FollowPathCommand (wraps Pedro follower.followPath)` : `   - RoadRunnerActionCommand (wraps Road Runner Action)`}
+
+8. Create the TeleOp OpMode:
+   - Thin — just constructs Robot, binds buttons, sets default commands
+   - Use GamepadEx for enhanced gamepad with edge detection
+   - Bind operator buttons to commands using .whenPressed(), .whileHeld(), etc.
+   - Set drive default command
+
+9. Create the Autonomous OpMode:
+   - Build paths in initialize()
+   - Schedule a single SequentialCommandGroup with all steps
+   - Use .alongWith() for parallel actions (drive while lifting)
+   - Use WaitCommand for servo settling times
+
+10. Call validate_ftc_code on generated code.
+
+Important: Use SolversLib imports (com.seattlesolvers.solverslib.*), NOT FTCLib imports. All @Config values read at point of use in periodic(), never cached.`,
+            },
+          },
+        ],
+      };
+    }
+  );
+
+  // ── 9. Setup Gradle ───────────────────────────────────────────────────
 
   server.prompt(
     "setup-gradle",

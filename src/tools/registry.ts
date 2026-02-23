@@ -78,6 +78,7 @@ export function registerTools(server: McpServer): void {
           roadrunner: false,
           cachinghardware: false,
           ftclib: false,
+          solverslib: false,
         };
         if (depsGradle) {
           const depsLower = depsGradle.toLowerCase();
@@ -86,6 +87,7 @@ export function registerTools(server: McpServer): void {
           if (depsLower.includes("roadrunner")) libraries.roadrunner = true;
           if (depsLower.includes("cachinghardware")) libraries.cachinghardware = true;
           if (depsLower.includes("ftclib")) libraries.ftclib = true;
+          if (depsLower.includes("solverslib")) libraries.solverslib = true;
         }
         result.libraries = libraries;
 
@@ -104,6 +106,9 @@ export function registerTools(server: McpServer): void {
         const javaFiles: string[] = [];
         let usesPedro = false;
         let usesRoadRunner = false;
+        let usesSolversLib = false;
+        let usesFtcLib = false;
+        let usesCommandBase = false;
         let hasFollowerConstants = false;
         let hasMecanumConstants = false;
 
@@ -162,6 +167,17 @@ export function registerTools(server: McpServer): void {
             // Road Runner imports
             if (content.includes("com.acmerobotics.roadrunner")) usesRoadRunner = true;
 
+            // SolversLib imports
+            if (content.includes("com.seattlesolvers.solverslib")) usesSolversLib = true;
+
+            // FTCLib imports (legacy)
+            if (content.includes("com.arcrobotics.ftclib")) usesFtcLib = true;
+
+            // Command-based pattern detection
+            if (content.includes("CommandOpMode") || content.includes("SubsystemBase") || content.includes("CommandBase")) {
+              usesCommandBase = true;
+            }
+
             // Constants detection
             if (content.includes("FollowerConstants")) hasFollowerConstants = true;
             if (content.includes("MecanumConstants")) hasMecanumConstants = true;
@@ -188,6 +204,9 @@ export function registerTools(server: McpServer): void {
         result.hardwareDevices = Array.from(deviceMap.values());
         result.usesPedro = usesPedro;
         result.usesRoadRunner = usesRoadRunner;
+        result.usesSolversLib = usesSolversLib;
+        result.usesFtcLib = usesFtcLib;
+        result.usesCommandBase = usesCommandBase;
         result.hasFollowerConstants = hasFollowerConstants;
         result.hasMecanumConstants = hasMecanumConstants;
 
@@ -321,7 +340,7 @@ export function registerTools(server: McpServer): void {
     "Search the FTC knowledge base for documentation matching a query. Returns the most relevant sections.",
     {
       query: z.string().describe("Search query"),
-      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, ftclib, all"),
+      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, all"),
     },
     async ({ query, category }) => {
       // Build search index from all knowledge modules
@@ -346,7 +365,7 @@ export function registerTools(server: McpServer): void {
         index.push({ category: "roadrunner", key, content });
       }
       for (const [key, content] of Object.entries(FTCLIB_KNOWLEDGE)) {
-        index.push({ category: "ftclib", key, content });
+        index.push({ category: "command-base", key, content });
       }
 
       // Split query into lowercase words
@@ -402,7 +421,7 @@ export function registerTools(server: McpServer): void {
     "get_ftc_example",
     "Get a complete, compilable Java code example for an FTC topic. Returns a full working file.",
     {
-      topic: z.string().describe("Example topic: pedro-auto, pedro-teleop, pedro-constants, dashboard-config, bulk-reads, subsystem, pid-tuning, vision-pipeline, custom-pid-drive, field-centric-drive"),
+      topic: z.string().describe("Example topic: pedro-auto, pedro-teleop, pedro-constants, dashboard-config, bulk-reads, subsystem, pid-tuning, vision-pipeline, custom-pid-drive, field-centric-drive, command-teleop, command-auto, command-subsystem"),
     },
     async ({ topic }) => {
       const example = EXAMPLES[topic];
@@ -618,6 +637,48 @@ export function registerTools(server: McpServer): void {
       if (/\.setPower\(\s*gamepad[12]\.left_stick_y\s*\)/.test(code)) {
         issues.push(
           "[WARNING] Gamepad Y axis is inverted — use -gamepad1.left_stick_y for forward. Currently passing raw (inverted) value to setPower()."
+        );
+      }
+
+      // 10. SolversLib + FTCLib coexistence
+      if (
+        code.includes("com.seattlesolvers.solverslib") &&
+        code.includes("com.arcrobotics.ftclib")
+      ) {
+        issues.push(
+          "[ERROR] SolversLib and FTCLib imports found in the same file. These libraries CANNOT coexist — they share the same class names in different packages. Use one or the other. SolversLib (com.seattlesolvers.solverslib) is recommended as the actively maintained fork."
+        );
+      }
+
+      // 11. CommandOpMode without super.run()
+      if (
+        code.includes("CommandOpMode") &&
+        /public\s+void\s+run\s*\(\)/.test(code) &&
+        !code.includes("super.run()")
+      ) {
+        issues.push(
+          "[CRITICAL] CommandOpMode.run() is overridden but super.run() is not called. The CommandScheduler will not execute — no commands or subsystem periodic() methods will run. Add super.run() at the start of your run() method."
+        );
+      }
+
+      // 12. SubsystemBase without register() or addRequirements()
+      if (
+        code.includes("extends SubsystemBase") &&
+        !code.includes("register(") &&
+        !code.includes("register()")
+      ) {
+        issues.push(
+          "[WARNING] SubsystemBase is extended but register() is never called. The subsystem won't be registered with the CommandScheduler, so periodic() won't run. Call register() in the constructor or register the subsystem in your OpMode's initialize()."
+        );
+      }
+
+      // 13. CommandBase without addRequirements()
+      if (
+        code.includes("extends CommandBase") &&
+        !code.includes("addRequirements(")
+      ) {
+        issues.push(
+          "[WARNING] CommandBase is extended but addRequirements() is never called. Without declaring subsystem requirements, the scheduler cannot prevent conflicting commands from running simultaneously on the same subsystem."
         );
       }
 

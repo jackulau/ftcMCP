@@ -500,16 +500,100 @@ export function registerResources(server: McpServer): void {
     })
   );
 
-  // ── FTCLib (FTCLIB_KNOWLEDGE) ─────────────────────────────────────────
+  // ── Command-Based / SolversLib (FTCLIB_KNOWLEDGE) ──────────────────────
 
   server.resource(
-    "FTCLib API",
-    "ftc://ftclib/api-reference",
+    "Command-Base Setup",
+    "ftc://command-base/setup",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.setup
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base API",
+    "ftc://command-base/api",
     async (uri) => ({
       contents: [{
         uri: uri.href,
         mimeType: "text/plain",
         text: FTCLIB_KNOWLEDGE.apiReference
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base Subsystem Patterns",
+    "ftc://command-base/subsystems",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.subsystemPatterns
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base Command Patterns",
+    "ftc://command-base/commands",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.commandPatterns
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base Triggers & GamepadEx",
+    "ftc://command-base/triggers",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.triggers
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base Project Organization",
+    "ftc://command-base/organization",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.organization
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base Pedro Integration",
+    "ftc://command-base/pedro-integration",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.pedroIntegration
+      }]
+    })
+  );
+
+  server.resource(
+    "Command-Base SolversLib Extras",
+    "ftc://command-base/extras",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTCLIB_KNOWLEDGE.extras
       }]
     })
   );

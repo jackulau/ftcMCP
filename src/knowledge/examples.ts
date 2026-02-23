@@ -1391,6 +1391,421 @@ public class FieldCentricDriveExample extends OpMode {
         telemetry.addData("Loop Time (ms)", "%.2f", loopMs);
         telemetry.update();
     }
+}`,
+
+"command-teleop": `package org.firstinspires.ftc.teamcode.opmode.teleop;
+
+import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.config.Config;
+import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.seattlesolvers.solverslib.command.CommandOpMode;
+import com.seattlesolvers.solverslib.command.CommandScheduler;
+import com.seattlesolvers.solverslib.command.InstantCommand;
+import com.seattlesolvers.solverslib.command.RunCommand;
+import com.seattlesolvers.solverslib.command.SequentialCommandGroup;
+import com.seattlesolvers.solverslib.command.WaitCommand;
+import com.seattlesolvers.solverslib.gamepad.GamepadEx;
+import com.seattlesolvers.solverslib.gamepad.GamepadKeys;
+import com.qualcomm.hardware.lynx.LynxModule;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+
+import org.firstinspires.ftc.teamcode.commands.custom.DefaultDriveCommand;
+import org.firstinspires.ftc.teamcode.commands.custom.LiftToPositionCommand;
+import org.firstinspires.ftc.teamcode.commands.group.ScoreHighBasketCommand;
+import org.firstinspires.ftc.teamcode.subsystems.ClawSubsystem;
+import org.firstinspires.ftc.teamcode.subsystems.DriveSubsystem;
+import org.firstinspires.ftc.teamcode.subsystems.LiftSubsystem;
+
+/**
+ * Command-based TeleOp using SolversLib.
+ *
+ * Controls:
+ *   Driver (gamepad1):
+ *     Left stick   = translate (field-centric or robot-centric)
+ *     Right stick X = rotate
+ *     A            = toggle slow mode
+ *
+ *   Operator (gamepad2):
+ *     A       = toggle claw open/close
+ *     Y       = score high basket macro (lift → open → lower)
+ *     DPAD_UP = lift to high basket position
+ *     DPAD_DN = lift to home position
+ *     DPAD_LT = lift to low basket position
+ *     LB      = manual lift down (while held)
+ *     RB      = manual lift up (while held)
+ */
+@Config
+@TeleOp(name = "Command TeleOp", group = "Competition")
+public class CommandTeleOpExample extends CommandOpMode {
+
+    public static double SLOW_MULTIPLIER = 0.35;
+    public static double NORMAL_MULTIPLIER = 1.0;
+
+    private boolean slowMode = false;
+
+    @Override
+    public void initialize() {
+        // --- Bulk reads via scheduler ---
+        CommandScheduler.getInstance().setBulkCacheMode(LynxModule.BulkCachingMode.MANUAL);
+
+        // --- Telemetry to Dashboard ---
+        telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+
+        // --- Gamepads ---
+        GamepadEx driverGp = new GamepadEx(gamepad1);
+        GamepadEx operatorGp = new GamepadEx(gamepad2);
+
+        // --- Subsystems ---
+        DriveSubsystem drive = new DriveSubsystem(hardwareMap);
+        LiftSubsystem lift = new LiftSubsystem(hardwareMap);
+        ClawSubsystem claw = new ClawSubsystem(hardwareMap);
+
+        // --- Default Drive Command ---
+        drive.setDefaultCommand(new DefaultDriveCommand(
+            drive,
+            () -> -driverGp.getLeftY()  * (slowMode ? SLOW_MULTIPLIER : NORMAL_MULTIPLIER),
+            () ->  driverGp.getLeftX()  * (slowMode ? SLOW_MULTIPLIER : NORMAL_MULTIPLIER),
+            () ->  driverGp.getRightX() * (slowMode ? SLOW_MULTIPLIER : NORMAL_MULTIPLIER)
+        ));
+
+        // --- Driver Bindings ---
+        driverGp.getGamepadButton(GamepadKeys.Button.A)
+            .whenPressed(new InstantCommand(() -> slowMode = !slowMode));
+
+        // --- Operator Bindings ---
+
+        // Claw toggle
+        operatorGp.getGamepadButton(GamepadKeys.Button.A)
+            .whenPressed(new InstantCommand(claw::toggle, claw));
+
+        // Score macro: lift high → pause → open claw → pause → lower
+        operatorGp.getGamepadButton(GamepadKeys.Button.Y)
+            .whenPressed(new ScoreHighBasketCommand(lift, claw));
+
+        // Lift presets
+        operatorGp.getGamepadButton(GamepadKeys.Button.DPAD_UP)
+            .whenPressed(new LiftToPositionCommand(lift, LiftSubsystem.HIGH_BASKET));
+
+        operatorGp.getGamepadButton(GamepadKeys.Button.DPAD_DOWN)
+            .whenPressed(new LiftToPositionCommand(lift, LiftSubsystem.HOME));
+
+        operatorGp.getGamepadButton(GamepadKeys.Button.DPAD_LEFT)
+            .whenPressed(new LiftToPositionCommand(lift, LiftSubsystem.LOW_BASKET));
+
+        // Manual lift control (while held)
+        operatorGp.getGamepadButton(GamepadKeys.Button.RIGHT_BUMPER)
+            .whileHeld(new RunCommand(() -> lift.setManualPower(0.6), lift))
+            .whenReleased(new InstantCommand(lift::exitManual, lift));
+
+        operatorGp.getGamepadButton(GamepadKeys.Button.LEFT_BUMPER)
+            .whileHeld(new RunCommand(() -> lift.setManualPower(-0.4), lift))
+            .whenReleased(new InstantCommand(lift::exitManual, lift));
+
+        telemetry.addData("Status", "Command TeleOp Initialized");
+        telemetry.update();
+    }
+
+    @Override
+    public void run() {
+        super.run(); // MUST call super to tick the scheduler
+
+        telemetry.addData("Slow Mode", slowMode ? "ON" : "OFF");
+        telemetry.update();
+    }
+}`,
+
+"command-auto": `package org.firstinspires.ftc.teamcode.opmode.auton;
+
+import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.config.Config;
+import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.localization.Pose;
+import com.pedropathing.pathgen.BezierLine;
+import com.pedropathing.pathgen.PathChain;
+import com.pedropathing.pathgen.Point;
+import com.seattlesolvers.solverslib.command.CommandOpMode;
+import com.seattlesolvers.solverslib.command.CommandScheduler;
+import com.seattlesolvers.solverslib.command.InstantCommand;
+import com.seattlesolvers.solverslib.command.SequentialCommandGroup;
+import com.seattlesolvers.solverslib.command.WaitCommand;
+import com.seattlesolvers.solverslib.command.WaitUntilCommand;
+import com.qualcomm.hardware.lynx.LynxModule;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+
+import org.firstinspires.ftc.teamcode.commands.custom.FollowPathCommand;
+import org.firstinspires.ftc.teamcode.commands.custom.LiftToPositionCommand;
+import org.firstinspires.ftc.teamcode.subsystems.ClawSubsystem;
+import org.firstinspires.ftc.teamcode.subsystems.LiftSubsystem;
+
+/**
+ * Command-based autonomous using SolversLib + Pedro Pathing.
+ *
+ * This replaces the traditional FSM/switch-case pattern with a
+ * declarative SequentialCommandGroup. Each step is a command,
+ * and parallel actions use .alongWith().
+ */
+@Config
+@Autonomous(name = "Command Auto - Left", group = "Auto")
+public class CommandAutoExample extends CommandOpMode {
+
+    // Dashboard-tunable poses
+    public static double START_X = 9.0, START_Y = 60.0, START_HEADING = 0;
+    public static double SCORE_X = 38.0, SCORE_Y = 68.0;
+    public static double SAMPLE1_X = 37.0, SAMPLE1_Y = 30.0;
+    public static double PARK_X = 10.0, PARK_Y = 10.0;
+
+    private Follower follower;
+    private LiftSubsystem lift;
+    private ClawSubsystem claw;
+
+    @Override
+    public void initialize() {
+        // Bulk reads
+        CommandScheduler.getInstance().setBulkCacheMode(LynxModule.BulkCachingMode.MANUAL);
+
+        // Telemetry
+        telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+
+        // Subsystems
+        follower = new Follower(hardwareMap);
+        lift = new LiftSubsystem(hardwareMap);
+        claw = new ClawSubsystem(hardwareMap);
+
+        // Starting pose
+        Pose startPose = new Pose(START_X, START_Y, Math.toRadians(START_HEADING));
+        follower.setStartingPose(startPose);
+
+        // Build paths
+        PathChain scorePreload = follower.pathBuilder()
+            .addPath(new BezierLine(
+                new Point(START_X, START_Y, Point.CARTESIAN),
+                new Point(SCORE_X, SCORE_Y, Point.CARTESIAN)))
+            .setLinearHeadingInterpolation(Math.toRadians(START_HEADING), 0)
+            .build();
+
+        PathChain grabSample1 = follower.pathBuilder()
+            .addPath(new BezierLine(
+                new Point(SCORE_X, SCORE_Y, Point.CARTESIAN),
+                new Point(SAMPLE1_X, SAMPLE1_Y, Point.CARTESIAN)))
+            .setLinearHeadingInterpolation(0, 0)
+            .build();
+
+        PathChain scoreSample1 = follower.pathBuilder()
+            .addPath(new BezierLine(
+                new Point(SAMPLE1_X, SAMPLE1_Y, Point.CARTESIAN),
+                new Point(SCORE_X, SCORE_Y, Point.CARTESIAN)))
+            .setLinearHeadingInterpolation(0, 0)
+            .build();
+
+        PathChain park = follower.pathBuilder()
+            .addPath(new BezierLine(
+                new Point(SCORE_X, SCORE_Y, Point.CARTESIAN),
+                new Point(PARK_X, PARK_Y, Point.CARTESIAN)))
+            .setLinearHeadingInterpolation(0, 0)
+            .build();
+
+        // Schedule the full autonomous as one command group
+        schedule(new SequentialCommandGroup(
+            // === Score preloaded sample ===
+            // Drive to scoring position WHILE raising the lift
+            new FollowPathCommand(follower, scorePreload, true)
+                .alongWith(new LiftToPositionCommand(lift, LiftSubsystem.HIGH_BASKET)),
+            // Wait for lift to finish reaching target
+            new WaitUntilCommand(lift::atTarget),
+            // Open claw to release
+            new InstantCommand(claw::open, claw),
+            new WaitCommand(300),
+
+            // === Grab sample 1 ===
+            // Drive to sample WHILE lowering lift to intake height
+            new FollowPathCommand(follower, grabSample1, true)
+                .alongWith(new LiftToPositionCommand(lift, LiftSubsystem.INTAKE)),
+            // Close claw to grab
+            new InstantCommand(claw::close, claw),
+            new WaitCommand(200),
+
+            // === Score sample 1 ===
+            new FollowPathCommand(follower, scoreSample1, true)
+                .alongWith(new LiftToPositionCommand(lift, LiftSubsystem.HIGH_BASKET)),
+            new WaitUntilCommand(lift::atTarget),
+            new InstantCommand(claw::open, claw),
+            new WaitCommand(300),
+
+            // === Park ===
+            new FollowPathCommand(follower, park, false)
+                .alongWith(new LiftToPositionCommand(lift, LiftSubsystem.HOME))
+        ));
+
+        telemetry.addData("Status", "Command Auto Initialized");
+        telemetry.update();
+    }
+
+    @Override
+    public void run() {
+        super.run();
+
+        // Telemetry
+        Pose pose = follower.getPose();
+        telemetry.addData("X", "%.1f", pose.getX());
+        telemetry.addData("Y", "%.1f", pose.getY());
+        telemetry.addData("Heading", "%.1f", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("Lift Pos", lift.getPosition());
+        telemetry.addData("Lift Target", lift.getTarget());
+        telemetry.update();
+    }
+}`,
+
+"command-subsystem": `package org.firstinspires.ftc.teamcode.subsystems;
+
+import com.acmerobotics.dashboard.config.Config;
+import com.seattlesolvers.solverslib.command.SubsystemBase;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+/**
+ * Command-based lift subsystem using SolversLib's SubsystemBase.
+ *
+ * PID control runs continuously in periodic() — commands just set the target.
+ * All tunable constants are @Config public static for FTC Dashboard.
+ *
+ * Usage:
+ *   LiftSubsystem lift = new LiftSubsystem(hardwareMap);
+ *   // Register is called in constructor
+ *
+ *   // In a command:
+ *   lift.setTarget(LiftSubsystem.HIGH_BASKET);
+ *   // periodic() handles the PID automatically each scheduler tick
+ */
+@Config
+public class LiftSubsystem extends SubsystemBase {
+
+    // --- Dashboard-tunable PID coefficients ---
+    public static double kP = 0.005;
+    public static double kI = 0.0;
+    public static double kD = 0.001;
+    public static double kF = 0.12;    // gravity feedforward for linear slide
+
+    // --- Dashboard-tunable position presets ---
+    public static int HOME = 0;
+    public static int INTAKE = 50;
+    public static int LOW_BASKET = 1200;
+    public static int HIGH_BASKET = 2600;
+    public static int HIGH_CHAMBER = 1800;
+    public static int TOLERANCE = 15;
+
+    public static double MAX_POWER = 1.0;
+
+    // --- Hardware ---
+    private final DcMotorEx motor;
+
+    // --- State ---
+    private int targetPosition = 0;
+    private boolean manualMode = false;
+    private double manualPower = 0;
+
+    // --- PID state ---
+    private double integralSum = 0;
+    private double lastError = 0;
+    private final ElapsedTime timer = new ElapsedTime();
+
+    public LiftSubsystem(HardwareMap hardwareMap) {
+        motor = hardwareMap.get(DcMotorEx.class, "liftMotor");
+        motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+
+        // Register with the CommandScheduler automatically
+        register();
+    }
+
+    /**
+     * Called EVERY scheduler loop — runs PID regardless of which command is active.
+     * This ensures the mechanism is always actively controlled.
+     */
+    @Override
+    public void periodic() {
+        if (manualMode) {
+            motor.setPower(manualPower);
+            // Track position so we can hold when manual mode exits
+            targetPosition = motor.getCurrentPosition();
+            return;
+        }
+
+        // --- Software PID ---
+        // Read @Config coefficients fresh each loop for live Dashboard tuning
+        int current = motor.getCurrentPosition();
+        double error = targetPosition - current;
+        double dt = timer.seconds();
+        timer.reset();
+
+        // Proportional
+        double pTerm = kP * error;
+
+        // Integral (with anti-windup clamping)
+        integralSum += error * dt;
+        integralSum = Math.max(-500, Math.min(500, integralSum));
+        double iTerm = kI * integralSum;
+
+        // Derivative
+        double dTerm = (dt > 0) ? kD * (error - lastError) / dt : 0;
+        lastError = error;
+
+        // Feedforward (constant gravity compensation for linear slides)
+        double fTerm = (targetPosition > 50) ? kF : 0;
+
+        // Total output, clamped
+        double output = pTerm + iTerm + dTerm + fTerm;
+        output = Math.max(-MAX_POWER, Math.min(MAX_POWER, output));
+        motor.setPower(output);
+    }
+
+    // --- Target setters (called by commands) ---
+
+    public void setTarget(int position) {
+        manualMode = false;
+        targetPosition = position;
+        integralSum = 0; // reset integral on new target to prevent windup
+    }
+
+    public void goHome()       { setTarget(HOME); }
+    public void goIntake()     { setTarget(INTAKE); }
+    public void goLowBasket()  { setTarget(LOW_BASKET); }
+    public void goHighBasket() { setTarget(HIGH_BASKET); }
+
+    // --- Manual control (for joystick override) ---
+
+    public void setManualPower(double power) {
+        manualMode = true;
+        manualPower = power;
+    }
+
+    public void exitManual() {
+        manualMode = false;
+        // Hold current position when switching back to PID
+        targetPosition = motor.getCurrentPosition();
+        integralSum = 0;
+    }
+
+    // --- Queries ---
+
+    public boolean atTarget() {
+        return !manualMode && Math.abs(motor.getCurrentPosition() - targetPosition) < TOLERANCE;
+    }
+
+    public int getPosition() {
+        return motor.getCurrentPosition();
+    }
+
+    public int getTarget() {
+        return targetPosition;
+    }
+
+    public boolean isManual() {
+        return manualMode;
+    }
 }`
 
 };

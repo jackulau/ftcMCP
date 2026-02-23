@@ -299,12 +299,28 @@ implementation 'dev.frozenmilk.dairy:CachingHardware:1.0.0'
 
 ---
 
-### FTCLib (General FTC Utility Library)
+### SolversLib (Command-Based Framework — Recommended)
+**Repository:**
+\`\`\`groovy
+maven { url = "https://repo.dairy.foundation/releases" }
+\`\`\`
+**Dependencies:**
+\`\`\`groovy
+implementation "org.solverslib:core:0.3.4"
+\`\`\`
+**Note:** SolversLib is the actively maintained fork of FTCLib (by Seattle Solvers).
+**CRITICAL:** SolversLib and FTCLib CANNOT coexist in the same project. Pick one.
+Shares the same Dairy Foundation Maven repo as CachingHardware.
+
+---
+
+### FTCLib (Legacy — Use SolversLib Instead)
 **Repository:** Maven Central (already included by default — no extra repo needed)
 **Dependencies:**
 \`\`\`groovy
 implementation 'org.ftclib.ftclib:core:2.1.1'
 \`\`\`
+**Note:** FTCLib is no longer actively maintained. SolversLib is recommended.
 
 ---
 
@@ -317,10 +333,10 @@ repositories {
     // FTC Dashboard + Road Runner
     maven { url = 'https://maven.brott.dev/' }
 
-    // Dairy Foundation (CachingHardware)
+    // Dairy Foundation (CachingHardware + SolversLib)
     maven { url = 'https://repo.dairy.foundation/releases' }
 
-    // FTCLib — uses Maven Central, which is already in root build.gradle (no extra repo needed)
+    // FTCLib (legacy) — uses Maven Central, already in root build.gradle (no extra repo needed)
 }
 
 dependencies {
@@ -340,8 +356,11 @@ dependencies {
     // CachingHardware
     implementation 'dev.frozenmilk.dairy:CachingHardware:1.0.0'
 
-    // FTCLib
-    implementation 'org.ftclib.ftclib:core:2.1.1'
+    // SolversLib (command-based framework — recommended over FTCLib)
+    implementation 'org.solverslib:core:0.3.4'
+
+    // FTCLib (legacy — use SolversLib instead, they CANNOT coexist)
+    // implementation 'org.ftclib.ftclib:core:2.1.1'
 }
 \`\`\`
 
