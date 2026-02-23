@@ -6,6 +6,7 @@ import { FTC_SDK_KNOWLEDGE } from "../knowledge/ftc-sdk.js";
 import { GRADLE_KNOWLEDGE } from "../knowledge/gradle.js";
 import { ROADRUNNER_KNOWLEDGE } from "../knowledge/roadrunner.js";
 import { FTCLIB_KNOWLEDGE } from "../knowledge/ftclib.js";
+import { VISION_KNOWLEDGE } from "../knowledge/vision.js";
 
 export function registerResources(server: McpServer): void {
   // ── Core SDK (FTC_SDK_KNOWLEDGE) ──────────────────────────────────────
@@ -654,6 +655,128 @@ export function registerResources(server: McpServer): void {
         uri: uri.href,
         mimeType: "text/plain",
         text: FTCLIB_KNOWLEDGE.extras
+      }]
+    })
+  );
+
+  // ── Vision (VISION_KNOWLEDGE) ─────────────────────────────────────────
+
+  server.resource(
+    "Vision Overview",
+    "ftc://vision/overview",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.overview
+      }]
+    })
+  );
+
+  server.resource(
+    "VisionPortal Setup",
+    "ftc://vision/visionportal-setup",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.visionPortalSetup
+      }]
+    })
+  );
+
+  server.resource(
+    "AprilTag Detection",
+    "ftc://vision/apriltag-detection",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.aprilTagDetection
+      }]
+    })
+  );
+
+  server.resource(
+    "Camera Controls",
+    "ftc://vision/camera-controls",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.cameraControls
+      }]
+    })
+  );
+
+  server.resource(
+    "Limelight 3A Guide",
+    "ftc://vision/limelight",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.limelight
+      }]
+    })
+  );
+
+  server.resource(
+    "MegaTag Localization",
+    "ftc://vision/megatag",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.megaTag
+      }]
+    })
+  );
+
+  server.resource(
+    "Color Detection",
+    "ftc://vision/color-detection",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.colorDetection
+      }]
+    })
+  );
+
+  server.resource(
+    "Vision Optimization",
+    "ftc://vision/optimization",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.visionOptimization
+      }]
+    })
+  );
+
+  server.resource(
+    "Multi-Camera Setup",
+    "ftc://vision/multi-camera",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.multiCamera
+      }]
+    })
+  );
+
+  server.resource(
+    "Vision Patterns",
+    "ftc://vision/patterns",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: VISION_KNOWLEDGE.visionPatterns
       }]
     })
   );

@@ -10,6 +10,7 @@ import { FTC_SDK_KNOWLEDGE } from "../knowledge/ftc-sdk.js";
 import { GRADLE_KNOWLEDGE } from "../knowledge/gradle.js";
 import { ROADRUNNER_KNOWLEDGE } from "../knowledge/roadrunner.js";
 import { FTCLIB_KNOWLEDGE } from "../knowledge/ftclib.js";
+import { VISION_KNOWLEDGE } from "../knowledge/vision.js";
 import { EXAMPLES } from "../knowledge/examples.js";
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -340,7 +341,7 @@ export function registerTools(server: McpServer): void {
     "Search the FTC knowledge base for documentation matching a query. Returns the most relevant sections.",
     {
       query: z.string().describe("Search query"),
-      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, all. Covers build/deploy, IDE setup, ADB, and dev environment topics under sdk and gradle categories."),
+      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, vision, all. Covers build/deploy, IDE setup, ADB, dev environment, VisionPortal, AprilTag, Limelight, color detection, and vision optimization."),
     },
     async ({ query, category }) => {
       // Build search index from all knowledge modules
@@ -366,6 +367,9 @@ export function registerTools(server: McpServer): void {
       }
       for (const [key, content] of Object.entries(FTCLIB_KNOWLEDGE)) {
         index.push({ category: "command-base", key, content });
+      }
+      for (const [key, content] of Object.entries(VISION_KNOWLEDGE)) {
+        index.push({ category: "vision", key, content });
       }
 
       // Split query into lowercase words
@@ -450,12 +454,13 @@ export function registerTools(server: McpServer): void {
     "get_hardware_reference",
     "Get the complete API reference for a specific FTC hardware device or system.",
     {
-      device: z.string().describe("Hardware device or system: DcMotorEx, Servo, CRServo, IMU, Pinpoint, OTOS, Limelight, ColorSensor, DistanceSensor, TouchSensor, bulk-reads, caching-hardware, custom-wrappers, encoders, rev-hub, vision"),
+      device: z.string().describe("Hardware device or system: DcMotorEx, Servo, CRServo, IMU, Pinpoint, OTOS, Limelight, ColorSensor, DistanceSensor, TouchSensor, bulk-reads, caching-hardware, custom-wrappers, encoders, rev-hub, vision, visionportal, apriltag, camera-controls, megatag, color-detection, vision-optimization, multi-camera"),
     },
     async ({ device }) => {
       const deviceLower = device.toLowerCase();
 
-      const deviceMapping: Record<string, string[]> = {
+      // Hardware knowledge lookups
+      const hwMapping: Record<string, string[]> = {
         "dcmotor":          ["motorsApi", "motorRunModes", "motorSpecs"],
         "dcmotorex":        ["motorsApi", "motorRunModes", "motorSpecs"],
         "motor":            ["motorsApi", "motorRunModes", "motorSpecs"],
@@ -465,9 +470,7 @@ export function registerTools(server: McpServer): void {
         "imu":              ["sensorsImu"],
         "pinpoint":         ["pinpoint"],
         "otos":             ["otos"],
-        "limelight":        ["vision"],
         "colorsensor":      ["sensorsColor"],
-        "color":            ["sensorsColor"],
         "distancesensor":   ["sensorsDistance"],
         "distance":         ["sensorsDistance"],
         "touchsensor":      ["sensorsDigital"],
@@ -488,9 +491,6 @@ export function registerTools(server: McpServer): void {
         "rev-hub":          ["revHub"],
         "revhub":           ["revHub"],
         "lynx":             ["revHub"],
-        "vision":           ["vision"],
-        "apriltag":         ["vision"],
-        "camera":           ["vision"],
         "optimization":     ["optimizationSummary"],
         "pipeline":         ["commandPipeline"],
         "command-pipeline": ["commandPipeline"],
@@ -509,11 +509,70 @@ export function registerTools(server: McpServer): void {
         "performance":      ["optimizationSummary", "commandPipeline", "writeOptimization", "loopTimeBudget"],
       };
 
-      const keys = deviceMapping[deviceLower];
+      // Vision knowledge lookups
+      const visionMapping: Record<string, string[]> = {
+        "vision":               ["overview", "visionPortalSetup", "aprilTagDetection"],
+        "visionportal":         ["visionPortalSetup"],
+        "vision-portal":        ["visionPortalSetup"],
+        "apriltag":             ["aprilTagDetection"],
+        "april-tag":            ["aprilTagDetection"],
+        "camera":               ["cameraControls"],
+        "camera-controls":      ["cameraControls"],
+        "cameracontrols":       ["cameraControls"],
+        "exposure":             ["cameraControls"],
+        "gain":                 ["cameraControls"],
+        "focus":                ["cameraControls"],
+        "white-balance":        ["cameraControls"],
+        "whitebalance":         ["cameraControls"],
+        "limelight":            ["limelight", "megaTag"],
+        "limelight3a":          ["limelight", "megaTag"],
+        "limelight-3a":         ["limelight", "megaTag"],
+        "megatag":              ["megaTag"],
+        "megatag2":             ["megaTag"],
+        "mega-tag":             ["megaTag"],
+        "localization":         ["megaTag"],
+        "color-detection":      ["colorDetection"],
+        "colordetection":       ["colorDetection"],
+        "color-detect":         ["colorDetection"],
+        "hsv":                  ["colorDetection"],
+        "opencv":               ["colorDetection"],
+        "contour":              ["colorDetection"],
+        "visionprocessor":      ["colorDetection"],
+        "vision-processor":     ["colorDetection"],
+        "vision-optimization":  ["visionOptimization"],
+        "visionoptimization":   ["visionOptimization"],
+        "decimation":           ["visionOptimization", "aprilTagDetection"],
+        "fps":                  ["visionOptimization"],
+        "resolution":           ["visionOptimization"],
+        "motion-blur":          ["visionOptimization", "cameraControls"],
+        "multi-camera":         ["multiCamera"],
+        "multicamera":          ["multiCamera"],
+        "dual-camera":          ["multiCamera"],
+        "dualcamera":           ["multiCamera"],
+        "multiportal":          ["multiCamera"],
+        "vision-patterns":      ["visionPatterns"],
+        "visionpatterns":       ["visionPatterns"],
+        "drive-to-tag":         ["visionPatterns"],
+        "init-detection":       ["visionPatterns"],
+        "snapscript":           ["megaTag"],
+        "python-pipeline":      ["megaTag"],
+      };
 
-      if (keys) {
+      // Check hardware knowledge first
+      const hwKeys = hwMapping[deviceLower];
+      if (hwKeys) {
         const hw = HARDWARE_KNOWLEDGE as Record<string, string>;
-        const sections = keys.map(k => hw[k]).filter(Boolean);
+        const sections = hwKeys.map(k => hw[k]).filter(Boolean);
+        return {
+          content: [{ type: "text" as const, text: sections.join("\n\n---\n\n") }],
+        };
+      }
+
+      // Check vision knowledge
+      const visionKeys = visionMapping[deviceLower];
+      if (visionKeys) {
+        const vis = VISION_KNOWLEDGE as Record<string, string>;
+        const sections = visionKeys.map(k => vis[k]).filter(Boolean);
         return {
           content: [{ type: "text" as const, text: sections.join("\n\n---\n\n") }],
         };
@@ -524,8 +583,15 @@ export function registerTools(server: McpServer): void {
         "Pinpoint", "OTOS", "Limelight",
         "ColorSensor", "DistanceSensor", "TouchSensor",
         "bulk-reads", "caching-hardware", "custom-wrappers",
-        "encoders", "rev-hub", "vision", "optimization",
+        "encoders", "rev-hub", "optimization",
         "command-pipeline / queueing", "write-optimization", "loop-time / performance",
+        "vision / visionportal / apriltag",
+        "camera-controls / exposure / focus / white-balance",
+        "limelight / megatag / megatag2",
+        "color-detection / hsv / opencv / contour",
+        "vision-optimization / decimation / fps / resolution",
+        "multi-camera / dual-camera",
+        "vision-patterns / drive-to-tag / init-detection",
       ];
       return {
         content: [{

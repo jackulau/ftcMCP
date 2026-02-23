@@ -578,7 +578,92 @@ Important: The Gradle wrapper handles everything. Android Studio is optional —
     }
   );
 
-  // ── 10. Setup Gradle ──────────────────────────────────────────────────
+  // ── 10. Setup Vision ─────────────────────────────────────────────────
+
+  server.prompt(
+    "setup-vision",
+    "Set up FTC vision — USB webcam with VisionPortal and/or Limelight 3A for AprilTag and color detection",
+    {
+      visionSystem: z.string().optional().describe("webcam, limelight, or both"),
+      detectionType: z.string().optional().describe("apriltag, color, or both"),
+    },
+    async (args) => {
+      const system = args.visionSystem ?? "not specified";
+      const detection = args.detectionType ?? "not specified";
+
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Set up FTC vision for my robot:
+- Vision system: ${system}
+- Detection type: ${detection}
+
+Follow these steps:
+
+1. Call scan_ftc_project to check the current project state, existing vision code, and hardware names.
+
+2. Read the vision overview to understand the options:
+   - ftc://vision/overview — USB webcam vs Limelight comparison, when to use each
+
+3. Based on the chosen vision system, read the appropriate setup guides:
+${system === "limelight" || system === "both" ? `
+   Limelight 3A:
+   - ftc://vision/limelight — complete Limelight 3A API, all pipeline types, result reading
+   - ftc://vision/megatag — MegaTag1/MegaTag2 robot localization from AprilTags
+` : ""}${system === "webcam" || system === "both" || system === "not specified" ? `
+   USB Webcam + VisionPortal:
+   - ftc://vision/visionportal-setup — VisionPortal builder, lifecycle, streaming
+   - ftc://vision/camera-controls — exposure, gain, focus, white balance settings
+` : ""}
+4. Based on the detection type, read the detection guides:
+${detection === "apriltag" || detection === "both" || detection === "not specified" ? `
+   AprilTag Detection:
+   - ftc://vision/apriltag-detection — AprilTagProcessor setup, decimation, pose reading, tag libraries
+` : ""}${detection === "color" || detection === "both" ? `
+   Color Detection:
+   - ftc://vision/color-detection — custom VisionProcessor with OpenCV, HSV thresholding, contour analysis
+` : ""}
+5. Read the optimization guide:
+   - ftc://vision/optimization — resolution selection, decimation strategy, exposure for motion blur, processor toggling, stream format, ROI cropping, memory management
+
+6. Read common vision patterns:
+   - ftc://vision/patterns — init-phase detection, drive-to-AprilTag alignment, field localization, vision + path following integration
+
+7. Generate the vision code:
+${system === "limelight" ? `   - Initialize Limelight3A from hardwareMap
+   - Set poll rate to 100Hz
+   - Select the appropriate pipeline
+   - Read results in the loop with staleness checking
+   - If using MegaTag2: integrate IMU heading via updateRobotOrientation()` : system === "webcam" || system === "not specified" ? `   - Build VisionPortal with appropriate processors
+   - Set camera resolution (640x480 recommended for balance of speed and range)
+   - Configure manual exposure (5-6ms) and gain (250) for AprilTag detection
+   - Set manual white balance for consistent color detection
+   - Implement dynamic decimation switching (1 for init, 3 for driving)
+   - Toggle processors when not needed to save CPU` : `   - Set up BOTH webcam VisionPortal AND Limelight
+   - Use Limelight for AprilTag localization (offloads CPU)
+   - Use webcam for custom color detection
+   - Both run simultaneously on separate USB ports`}
+
+8. Add appropriate telemetry:
+   - Detection count, tag IDs, ranges, bearings
+   - FPS monitoring
+   - Pipeline latency (Limelight)
+   - Camera state
+
+9. Call validate_ftc_code on the generated code.
+
+Important: Set manual camera controls for competition consistency. Always have a fallback for when vision fails. Disable LiveView and unused processors in competition for maximum performance.`,
+            },
+          },
+        ],
+      };
+    }
+  );
+
+  // ── 11. Setup Gradle ──────────────────────────────────────────────────
 
   server.prompt(
     "setup-gradle",
