@@ -1,0 +1,24 @@
+{
+  "name": "ftc-mcp",
+  "version": "1.0.0",
+  "description": "MCP server providing FTC Robot Controller context for AI coding assistants",
+  "main": "build/index.js",
+  "bin": {
+    "ftc-mcp": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["ftc", "mcp", "robotics", "first-tech-challenge", "pedro-pathing", "ftc-dashboard"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
