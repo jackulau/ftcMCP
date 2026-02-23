@@ -877,5 +877,214 @@ backLeft.setDirection(DcMotor.Direction.REVERSE);
 - **FLOAT mode for drivetrain**: Sometimes preferred for driver feel during TeleOp.
 - **Version control**: Use Git. Commit working code before making changes.
 - **Comment your code**: Future you (and your teammates) will thank you.
+`,
+
+  devEnvironment: `
+## Development Environment Setup
+
+Android Studio is the traditional IDE for FTC, but it is NOT required. The FTC SDK includes a
+Gradle wrapper (\`gradlew\`/\`gradlew.bat\`) that handles the entire build process. Any editor or IDE
+that supports Java and Gradle can be used — VS Code, IntelliJ IDEA, or even a plain text editor
+with command-line builds.
+
+### Prerequisites (All IDEs)
+
+#### 1. JDK 17 (Required)
+The FTC SDK build requires JDK 17. Install it from one of these sources:
+- **Adoptium (recommended)**: https://adoptium.net/ — select JDK 17 LTS
+- **Oracle JDK 17**: https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html
+- **macOS (Homebrew)**: \`brew install openjdk@17\`
+- **Linux (apt)**: \`sudo apt install openjdk-17-jdk\`
+- **Windows (winget)**: \`winget install EclipseAdoptium.Temurin.17.JDK\`
+
+Verify installation:
+\`\`\`bash
+java -version
+# Should show: openjdk version "17.x.x" or similar
+\`\`\`
+
+**IMPORTANT**: Do NOT rely on the JDK bundled with Android Studio Ladybug. Ladybug ships with
+JDK 21 which is incompatible with the FTC SDK's Gradle configuration. Always install JDK 17
+separately and point your IDE/build to it.
+
+#### 2. Android SDK Command-Line Tools
+You need the Android SDK for compiling Android APKs. There are two ways to get it:
+
+**Option A: Install via Android Studio (easiest)**
+- Install Android Studio, which bundles the full SDK
+- SDK is typically installed at:
+  - **Windows**: \`C:\\Users\\<username>\\AppData\\Local\\Android\\Sdk\`
+  - **macOS**: \`~/Library/Android/sdk\`
+  - **Linux**: \`~/Android/Sdk\`
+
+**Option B: Command-line only (no Android Studio)**
+1. Download "Command line tools only" from https://developer.android.com/studio#command-line-tools-only
+2. Unzip to a directory (e.g., \`~/android-sdk/cmdline-tools/latest/\`)
+3. Install required SDK components:
+\`\`\`bash
+sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+\`\`\`
+
+#### 3. ANDROID_HOME Environment Variable
+Set this to point to your Android SDK location:
+
+**macOS/Linux** — add to \`~/.bashrc\`, \`~/.zshrc\`, or \`~/.profile\`:
+\`\`\`bash
+export ANDROID_HOME=~/Library/Android/sdk        # macOS (Android Studio default)
+# export ANDROID_HOME=~/Android/Sdk              # Linux (Android Studio default)
+# export ANDROID_HOME=~/android-sdk              # manual install
+export PATH="$ANDROID_HOME/platform-tools:$PATH" # adds adb to PATH
+\`\`\`
+
+**Windows** — System Environment Variables:
+\`\`\`
+ANDROID_HOME = C:\\Users\\<username>\\AppData\\Local\\Android\\Sdk
+PATH += %ANDROID_HOME%\\platform-tools
+\`\`\`
+
+Verify:
+\`\`\`bash
+adb version
+# Should show: Android Debug Bridge version x.x.x
+\`\`\`
+
+#### 4. ADB (Android Debug Bridge)
+ADB is included in the Android SDK's \`platform-tools/\` directory. Once \`ANDROID_HOME\` is set
+and \`platform-tools\` is in your PATH, \`adb\` should work from any terminal.
+
+---
+
+### VS Code Setup (Recommended Alternative to Android Studio)
+
+VS Code is a fully viable IDE for FTC development. The Gradle wrapper handles all compilation
+and deployment — VS Code just needs Java language support for code intelligence.
+
+#### Required Extensions
+1. **Extension Pack for Java** (\`vscjava.vscode-java-pack\`)
+   - Includes: Language Support for Java, Debugger for Java, Maven for Java, Test Runner
+   - Provides: autocomplete, go-to-definition, error highlighting, refactoring
+2. **Gradle for Java** (\`vscjava.vscode-gradle\`)
+   - Provides: Gradle task runner sidebar, dependency management, sync
+
+Install from the VS Code Extensions panel or via command line:
+\`\`\`bash
+code --install-extension vscjava.vscode-java-pack
+code --install-extension vscjava.vscode-gradle
+\`\`\`
+
+#### VS Code Settings for FTC
+Add these to your workspace \`.vscode/settings.json\`:
+\`\`\`json
+{
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "/path/to/jdk-17",
+            "default": true
+        }
+    ],
+    "java.jdt.ls.java.home": "/path/to/jdk-17",
+    "java.import.gradle.java.home": "/path/to/jdk-17",
+    "java.compile.nullAnalysis.mode": "disabled"
+}
+\`\`\`
+
+**Find your JDK 17 path:**
+\`\`\`bash
+# macOS (Homebrew)
+/usr/libexec/java_home -v 17
+
+# macOS (Adoptium)
+/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
+
+# Linux (apt)
+/usr/lib/jvm/java-17-openjdk-amd64
+
+# Windows (typical)
+C:\\Program Files\\Eclipse Adoptium\\jdk-17.x.x-hotspot
+\`\`\`
+
+#### Opening the FTC Project in VS Code
+1. Clone the FTC Robot Controller: \`git clone https://github.com/FIRST-Tech-Challenge/FtcRobotController.git\`
+2. Open the folder in VS Code: \`code FtcRobotController\`
+3. VS Code will detect the Gradle project automatically
+4. When prompted "Java projects found", click **Yes** to import
+5. Wait for Gradle sync to complete (first time takes 1-3 minutes)
+6. The Java extension will provide full autocomplete, error checking, and navigation
+
+#### VS Code Build & Deploy
+Use the integrated terminal:
+\`\`\`bash
+# Build the APK
+./gradlew assembleDebug
+
+# Deploy to connected device (USB or wireless ADB)
+./gradlew installDebug
+
+# Clean and rebuild
+./gradlew clean assembleDebug
+\`\`\`
+
+Or use the Gradle sidebar panel to run tasks visually.
+
+---
+
+### Android Studio Setup
+
+Android Studio is the "official" IDE but is NOT required. If you choose to use it:
+
+#### Installation
+1. Download from https://developer.android.com/studio
+2. Install — the installer includes the Android SDK and ADB
+3. Open Android Studio, go through the setup wizard
+4. Open the FTC project: **File → Open** → select the FtcRobotController folder
+
+#### CRITICAL: Android Studio Ladybug JDK Issue
+Android Studio Ladybug (2024.2+) bundles JDK 21, which is **incompatible** with the FTC SDK's
+Gradle configuration. You MUST configure Android Studio to use JDK 17:
+
+1. Install JDK 17 separately (see Prerequisites above)
+2. In Android Studio: **File → Settings → Build, Execution, Deployment → Build Tools → Gradle**
+3. Set **Gradle JDK** to your JDK 17 installation
+4. Click **Apply** and re-sync
+
+#### Do NOT Upgrade Gradle
+When Android Studio prompts you to "upgrade the Gradle plugin" or "update the Gradle wrapper",
+**click NO / dismiss the notification**. The FTC SDK uses specific Gradle and AGP versions that
+are tested together. Upgrading can break the build.
+
+---
+
+### IntelliJ IDEA Setup
+
+IntelliJ IDEA Community Edition (free) also works for FTC:
+
+1. Download from https://www.jetbrains.com/idea/download/ — select **Community** (free)
+2. Open the FtcRobotController folder as a Gradle project
+3. IntelliJ will auto-detect Gradle and import the project
+4. Set the Gradle JDK to JDK 17: **File → Settings → Build → Gradle → Gradle JDK**
+5. Build/deploy from the terminal: \`./gradlew assembleDebug\` / \`./gradlew installDebug\`
+
+IntelliJ provides similar Java intelligence to Android Studio (they share the same base platform)
+but without Android-specific UI designers (which FTC doesn't use anyway).
+
+---
+
+### Summary: IDE Comparison for FTC
+
+| Feature | VS Code | Android Studio | IntelliJ IDEA |
+|---|---|---|---|
+| Java autocomplete | Yes (via extension) | Yes (built-in) | Yes (built-in) |
+| Gradle build | Yes (terminal + extension) | Yes (built-in) | Yes (built-in) |
+| ADB deploy | Yes (terminal) | Yes (Run button) | Yes (terminal) |
+| Lightweight | Very lightweight | Heavy (2-4 GB RAM) | Moderate |
+| Setup complexity | Easy | Easy but JDK issue | Easy |
+| Android-specific features | No (not needed for FTC) | Yes (not needed) | No |
+| Cost | Free | Free | Free (Community) |
+| Recommended for | Teams wanting speed + simplicity | Teams wanting traditional setup | Teams familiar with JetBrains |
+
+**Bottom line:** All three work. VS Code + Gradle wrapper is the lightest-weight option and avoids
+the Android Studio Ladybug JDK compatibility issue entirely. Android Studio is familiar to most
+FTC teams but requires the JDK 17 workaround. Use whatever your team is most comfortable with.
 `
 };

@@ -505,7 +505,80 @@ Important: Use SolversLib imports (com.seattlesolvers.solverslib.*), NOT FTCLib 
     }
   );
 
-  // ── 9. Setup Gradle ───────────────────────────────────────────────────
+  // ── 9. Build and Deploy ─────────────────────────────────────────────
+
+  server.prompt(
+    "build-and-deploy",
+    "Set up build and deploy workflow for FTC — works with VS Code, Android Studio, IntelliJ, or command line",
+    {
+      ide: z.string().optional().describe("vscode, android-studio, intellij, or command-line"),
+      connection: z.string().optional().describe("usb or wifi"),
+    },
+    async (args) => {
+      const ide = args.ide ?? "not specified";
+      const connection = args.connection ?? "not specified";
+
+      return {
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Set up the build and deploy workflow for my FTC project:
+- IDE: ${ide}
+- Robot connection: ${connection}
+
+Follow these steps:
+
+1. Call scan_ftc_project to check the current project state and Gradle configuration.
+
+2. Read the development environment resource:
+   - ftc://sdk/dev-environment — prerequisites (JDK 17, Android SDK, ANDROID_HOME), IDE-specific setup instructions for VS Code, Android Studio, and IntelliJ
+
+3. Read the build and deploy resource:
+   - ftc://gradle/build-and-deploy — Gradle wrapper commands, ADB connection, wireless deploy, logcat debugging, troubleshooting
+
+4. Set up the development environment:
+${ide === "vscode" ? `   - Ensure VS Code extensions are installed: Extension Pack for Java (vscjava.vscode-java-pack), Gradle for Java (vscjava.vscode-gradle)
+   - Create .vscode/settings.json with JDK 17 path
+   - Create .vscode/tasks.json with FTC build/deploy tasks for Ctrl+Shift+B integration` : ide === "android-studio" ? `   - Verify Android Studio is using JDK 17 (NOT the bundled JDK 21 from Ladybug)
+   - Configure Gradle JDK: File → Settings → Build → Gradle → Gradle JDK → JDK 17
+   - Do NOT upgrade Gradle or AGP when prompted` : ide === "intellij" ? `   - Set Gradle JDK to JDK 17: File → Settings → Build → Gradle → Gradle JDK
+   - Import the project as a Gradle project` : `   - Verify JDK 17 is installed and JAVA_HOME is set
+   - Verify Android SDK is installed and ANDROID_HOME is set
+   - Verify adb is in PATH`}
+
+5. Verify the build works:
+   - Run \`./gradlew assembleDebug\` and confirm it succeeds
+   - If it fails, check ftc://gradle/common-issues for troubleshooting
+
+6. Set up robot connection:
+${connection === "wifi" ? `   - Connect computer to Control Hub WiFi network
+   - Run \`adb connect 192.168.43.1:5555\`
+   - Verify with \`adb devices\`` : connection === "usb" ? `   - Connect USB cable from computer to Control Hub
+   - Verify with \`adb devices\`` : `   - Explain both USB and WiFi connection options
+   - USB: plug in and run \`adb devices\`
+   - WiFi: connect to robot WiFi, then \`adb connect 192.168.43.1:5555\``}
+
+7. Deploy and test:
+   - Run \`./gradlew installDebug\` to build and deploy in one step
+   - Confirm the app restarts on the Control Hub
+   - Check the Driver Station for your OpModes
+
+8. Set up debugging:
+   - Show how to use \`adb logcat\` to view runtime logs
+   - Explain how to add Log.d() statements in Java code
+   - Show filtered logcat: \`adb logcat -s MyTag:*\`
+
+Important: The Gradle wrapper handles everything. Android Studio is optional — any editor works. JDK 17 is required (not 21).`,
+            },
+          },
+        ],
+      };
+    }
+  );
+
+  // ── 10. Setup Gradle ──────────────────────────────────────────────────
 
   server.prompt(
     "setup-gradle",

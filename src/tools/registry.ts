@@ -340,7 +340,7 @@ export function registerTools(server: McpServer): void {
     "Search the FTC knowledge base for documentation matching a query. Returns the most relevant sections.",
     {
       query: z.string().describe("Search query"),
-      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, all"),
+      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, gradle, hardware, performance, command-base, ftclib, all. Covers build/deploy, IDE setup, ADB, and dev environment topics under sdk and gradle categories."),
     },
     async ({ query, category }) => {
       // Build search index from all knowledge modules

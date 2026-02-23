@@ -70,6 +70,18 @@ export function registerResources(server: McpServer): void {
     })
   );
 
+  server.resource(
+    "Dev Environment Setup",
+    "ftc://sdk/dev-environment",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: FTC_SDK_KNOWLEDGE.devEnvironment
+      }]
+    })
+  );
+
   // ── Pedro Pathing (PEDRO_KNOWLEDGE) ───────────────────────────────────
 
   server.resource(
@@ -276,6 +288,18 @@ export function registerResources(server: McpServer): void {
         uri: uri.href,
         mimeType: "text/plain",
         text: GRADLE_KNOWLEDGE.buildProcess
+      }]
+    })
+  );
+
+  server.resource(
+    "Build and Deploy",
+    "ftc://gradle/build-and-deploy",
+    async (uri) => ({
+      contents: [{
+        uri: uri.href,
+        mimeType: "text/plain",
+        text: GRADLE_KNOWLEDGE.buildAndDeploy
       }]
     })
   );

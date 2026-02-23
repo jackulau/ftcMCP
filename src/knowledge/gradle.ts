@@ -599,5 +599,337 @@ public class DriveConstants {
 1. Add \`@Config\` to the class.
 2. Make the field \`public static\` (not final).
 3. Read the static field directly each loop iteration (don't cache it in a local variable).
+`,
+
+  buildAndDeploy: `
+## Building and Deploying to the Robot
+
+The FTC SDK includes a Gradle wrapper (\`gradlew\` / \`gradlew.bat\`) that handles the entire
+build process. You do NOT need Android Studio installed to build and deploy — a terminal with
+JDK 17 and the Android SDK is sufficient.
+
+### Quick Reference
+
+| Command | What it does |
+|---|---|
+| \`./gradlew assembleDebug\` | Compile code and build the APK |
+| \`./gradlew installDebug\` | Build + install APK to connected device |
+| \`./gradlew clean assembleDebug\` | Clean everything and rebuild from scratch |
+| \`./gradlew --stop\` | Stop the Gradle daemon (fixes stale build issues) |
+| \`./gradlew --refresh-dependencies\` | Force re-download all dependencies |
+| \`./gradlew tasks\` | List all available Gradle tasks |
+
+**Windows users:** Use \`gradlew.bat\` instead of \`./gradlew\`.
+
+---
+
+### Complete Build & Deploy Workflow
+
+#### Step 1: Clone the FTC Robot Controller
+\`\`\`bash
+git clone https://github.com/FIRST-Tech-Challenge/FtcRobotController.git
+cd FtcRobotController
+\`\`\`
+
+Or if your team has a fork:
+\`\`\`bash
+git clone https://github.com/<your-team>/FtcRobotController.git
+cd FtcRobotController
+\`\`\`
+
+#### Step 2: Make the Gradle Wrapper Executable (macOS/Linux)
+\`\`\`bash
+chmod +x gradlew
+\`\`\`
+
+#### Step 3: Build the APK
+\`\`\`bash
+./gradlew assembleDebug
+\`\`\`
+
+This compiles all Java source code, runs D8 (DEX compiler), packages resources, and produces
+a signed debug APK. First build takes 1-3 minutes; subsequent builds are incremental and much faster.
+
+**Build output location:**
+\`\`\`
+FtcRobotController/build/outputs/apk/debug/FtcRobotController-debug.apk
+\`\`\`
+
+**Note:** You do NOT need to manually find or copy the APK. The \`installDebug\` task handles deployment.
+
+#### Step 4: Connect to the Robot
+
+**Option A: USB Cable (most reliable)**
+1. Connect a USB cable from your computer to the Control Hub's USB-C port (or the Robot Controller phone's USB port)
+2. Verify ADB sees the device:
+\`\`\`bash
+adb devices
+# Should show:
+# List of devices attached
+# <serial_number>    device
+\`\`\`
+
+**Option B: Wireless ADB via Control Hub WiFi**
+1. Connect your computer to the Control Hub's WiFi network (the robot's WiFi hotspot)
+   - SSID is typically: \`FTC-<team_number>\` or the name configured in the Control Hub
+2. Connect ADB wirelessly:
+\`\`\`bash
+adb connect 192.168.43.1:5555
+\`\`\`
+3. Verify connection:
+\`\`\`bash
+adb devices
+# Should show:
+# List of devices attached
+# 192.168.43.1:5555    device
+\`\`\`
+
+**Option C: Wireless ADB via Robot Controller Phone**
+If using a phone as the Robot Controller (with an Expansion Hub):
+\`\`\`bash
+adb connect 192.168.49.1:5555
+\`\`\`
+
+**Option D: REV Hardware Client (Windows)**
+The REV Hardware Client app can automatically establish ADB connections to the Control Hub.
+Install from https://docs.revrobotics.com/rev-hardware-client. Once it detects the hub,
+ADB is auto-connected.
+
+#### Step 5: Deploy to the Robot
+\`\`\`bash
+./gradlew installDebug
+\`\`\`
+
+This builds the APK (if needed) and installs it onto the connected device via ADB.
+The Robot Controller app on the Control Hub/phone will restart with your updated code.
+
+**The OpModes you wrote will appear automatically** in the Driver Station dropdown —
+no additional registration is needed. Just annotate with \`@TeleOp\` or \`@Autonomous\`.
+
+#### Step 6: Iterate
+The typical development loop is:
+1. Edit Java code in your IDE/editor
+2. Run \`./gradlew installDebug\` (builds + deploys in one step)
+3. Test on the robot
+4. Repeat
+
+For faster iteration, keep the Gradle daemon running (it stays alive by default) — subsequent
+builds are incremental and typically complete in 5-15 seconds.
+
+---
+
+### ADB Commands for FTC
+
+#### Connection
+\`\`\`bash
+# Connect to Control Hub wirelessly
+adb connect 192.168.43.1:5555
+
+# Connect to Robot Controller phone wirelessly
+adb connect 192.168.49.1:5555
+
+# Disconnect
+adb disconnect 192.168.43.1:5555
+
+# List connected devices
+adb devices
+\`\`\`
+
+#### Deployment
+\`\`\`bash
+# Install APK directly (alternative to gradlew installDebug)
+adb install -r FtcRobotController/build/outputs/apk/debug/FtcRobotController-debug.apk
+
+# Uninstall the Robot Controller app (nuclear option for weird bugs)
+adb uninstall com.qualcomm.ftcrobotcontroller
+\`\`\`
+
+#### Debugging with Logcat
+\`\`\`bash
+# Stream ALL logs (very verbose)
+adb logcat
+
+# Filter for FTC-related logs (RobotCore tag)
+adb logcat -s RobotCore:*
+
+# Filter for your team's logs (use Log.d("MyTag", "message") in your code)
+adb logcat -s MyTag:*
+
+# Filter for errors and warnings only
+adb logcat *:W
+
+# Clear the log buffer and start fresh
+adb logcat -c && adb logcat
+
+# Save logcat output to a file
+adb logcat > robot_log.txt
+\`\`\`
+
+**Using Log in your Java code:**
+\`\`\`java
+import android.util.Log;
+
+// In your OpMode or subsystem:
+Log.d("MyAuto", "Current state: " + currentState);
+Log.e("MyAuto", "Error: motor not responding");
+Log.i("MyAuto", "Path completed in " + timer.seconds() + "s");
+\`\`\`
+
+Then filter with: \`adb logcat -s MyAuto:*\`
+
+#### Restart and Management
+\`\`\`bash
+# Restart the Robot Controller app (without reinstalling)
+adb shell am force-stop com.qualcomm.ftcrobotcontroller
+adb shell am start -n com.qualcomm.ftcrobotcontroller/.FtcRobotControllerActivity
+
+# Reboot the Control Hub
+adb reboot
+
+# Get Control Hub shell access
+adb shell
+\`\`\`
+
+---
+
+### Troubleshooting Build & Deploy Issues
+
+#### "adb: command not found"
+ADB is not in your PATH. Add the Android SDK \`platform-tools\` directory to your PATH:
+\`\`\`bash
+export PATH="$ANDROID_HOME/platform-tools:$PATH"
+\`\`\`
+
+#### "error: no devices/emulators found"
+No device is connected. Check:
+1. USB cable is connected and the device shows up in \`adb devices\`
+2. For wireless: ensure you're on the robot's WiFi network and ran \`adb connect\`
+3. Try \`adb kill-server && adb start-server\` to restart the ADB server
+
+#### "INSTALL_FAILED_UPDATE_INCOMPATIBLE"
+The installed APK was signed with a different key. Uninstall first:
+\`\`\`bash
+adb uninstall com.qualcomm.ftcrobotcontroller
+./gradlew installDebug
+\`\`\`
+
+#### Build fails with "SDK location not found"
+Set the ANDROID_HOME environment variable or create a \`local.properties\` file in the project root:
+\`\`\`properties
+sdk.dir=/path/to/Android/sdk
+\`\`\`
+
+For example:
+\`\`\`properties
+# macOS
+sdk.dir=/Users/<username>/Library/Android/sdk
+
+# Linux
+sdk.dir=/home/<username>/Android/Sdk
+
+# Windows (use forward slashes or double backslashes)
+sdk.dir=C:/Users/<username>/AppData/Local/Android/Sdk
+\`\`\`
+
+#### Build fails with "Failed to find target with hash string 'android-34'"
+Install the Android SDK Platform 34. From the command line:
+\`\`\`bash
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+\`\`\`
+Or install it via Android Studio's SDK Manager (Tools -> SDK Manager -> SDK Platforms -> Android 14.0).
+
+#### Gradle build is extremely slow
+1. Increase memory: edit \`gradle.properties\` and set \`org.gradle.jvmargs=-Xmx2048M\`
+2. Enable parallel builds: add \`org.gradle.parallel=true\` to \`gradle.properties\`
+3. Kill stale daemon: \`./gradlew --stop\` then rebuild
+4. Clean build if incremental is broken: \`./gradlew clean assembleDebug\`
+
+#### Wireless ADB keeps disconnecting
+This is common. The Control Hub WiFi can be flaky. Tips:
+- USB deployment is always more reliable for competition
+- After reconnecting WiFi, re-run \`adb connect 192.168.43.1:5555\`
+- REV Hardware Client (Windows) can auto-reconnect
+- Some teams deploy via USB and only use WiFi for FTC Dashboard
+
+---
+
+### One-Command Deploy Scripts
+
+For convenience, create a deploy script in your project root:
+
+**deploy.sh (macOS/Linux):**
+\`\`\`bash
+#!/bin/bash
+echo "Building and deploying to robot..."
+./gradlew installDebug
+if [ $? -eq 0 ]; then
+    echo "Deploy successful!"
+else
+    echo "Deploy failed. Check errors above."
+    exit 1
+fi
+\`\`\`
+
+**deploy.bat (Windows):**
+\`\`\`batch
+@echo off
+echo Building and deploying to robot...
+gradlew.bat installDebug
+if %ERRORLEVEL% EQU 0 (
+    echo Deploy successful!
+) else (
+    echo Deploy failed. Check errors above.
+    exit /b 1
+)
+\`\`\`
+
+Make it executable: \`chmod +x deploy.sh\`
+
+---
+
+### VS Code Task Integration
+
+Add a \`.vscode/tasks.json\` to run Gradle from the VS Code Command Palette (\`Ctrl+Shift+B\`):
+
+\`\`\`json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "FTC: Build",
+            "type": "shell",
+            "command": "./gradlew assembleDebug",
+            "group": "build",
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "FTC: Deploy",
+            "type": "shell",
+            "command": "./gradlew installDebug",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "FTC: Clean Build",
+            "type": "shell",
+            "command": "./gradlew clean assembleDebug",
+            "group": "build",
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "FTC: Connect ADB (Control Hub WiFi)",
+            "type": "shell",
+            "command": "adb connect 192.168.43.1:5555",
+            "group": "none",
+            "problemMatcher": []
+        }
+    ]
+}
+\`\`\`
+
+With this, press \`Ctrl+Shift+B\` (or \`Cmd+Shift+B\` on Mac) to build and deploy in one keystroke.
 `
 };
