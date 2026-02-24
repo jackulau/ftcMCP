@@ -27,7 +27,7 @@ export function registerPrompts(server: McpServer): void {
 
 Follow these steps IN ORDER:
 
-1. Call the scan_ftc_project tool to understand the current project state (existing files, Gradle config, dependencies already present).
+1. Call the scan_project tool to understand the current project state (existing files, Gradle config, dependencies already present).
 
 2. Read these resources for Gradle setup guidance:
    - ftc://gradle/project-structure — understand the FTC Gradle layout
@@ -95,7 +95,7 @@ Important: Always use the exact library coordinates from the resources. Do not g
 
 Follow these steps:
 
-1. Call scan_ftc_project to understand the current project — existing OpModes, subsystems, Constants file, hardware names.
+1. Call scan_project to understand the current project — existing OpModes, subsystems, Constants file, hardware names.
 
 2. Read the appropriate pathing resources:
 ${pathing === "roadrunner" ? `   - ftc://roadrunner/api-reference — Road Runner trajectory API` : `   - ftc://pedro/api-reference — Pedro Pathing follower and path building API
@@ -149,15 +149,15 @@ Important: The auto should be competition-ready with proper error handling, stat
 
 Follow these steps:
 
-1. Call scan_ftc_project to find existing subsystems, hardware config names, and Constants files.
+1. Call scan_project to find existing subsystems, hardware config names, and Constants files.
 
 2. Read the relevant resources:
    - ftc://sdk/gamepad-api — gamepad button/stick API and edge detection
    - ftc://sdk/opmode-patterns — LinearOpMode vs OpMode patterns
    - ftc://hardware/bulk-reads — set up bulk read caching (MANUAL mode, clear each loop)
    - ftc://dashboard/telemetry — MultipleTelemetry for dual DS + Dashboard output
-${drive === "pedro" ? `   - ftc://pedro/teleop-structure — Pedro TeleOp drive integration` : `   - ftc://hardware/motors/api — motor control for mecanum math`}
-${drive === "field-centric" ? `   - ftc://hardware/sensors/imu — IMU heading for field-centric calculation` : ""}
+${drive === "pedro" ? `   - ftc://pedro/teleop-structure — Pedro TeleOp drive integration` : `   - ftc://hardware/motors-api — motor control for mecanum math`}
+${drive === "field-centric" ? `   - ftc://hardware/sensors-imu — IMU heading for field-centric calculation` : ""}
 
 3. Generate the TeleOp OpMode:
    - Drive control:
@@ -208,11 +208,11 @@ ${drive === "field-centric" ? `   - ftc://hardware/sensors/imu — IMU heading f
 
 Follow these steps:
 
-1. Call scan_ftc_project to see existing subsystems and hardware configuration names.
+1. Call scan_project to see existing subsystems and hardware configuration names.
 
 2. Read the relevant resources:
-   - ftc://hardware/motors/api and ftc://hardware/servos/api — motor and servo control API
-   - ftc://hardware/motors/run-modes — RUN_TO_POSITION, RUN_USING_ENCODER, etc.
+   - ftc://hardware/motors-api and ftc://hardware/servos-api — motor and servo control API
+   - ftc://hardware/motor-run-modes — RUN_TO_POSITION, RUN_USING_ENCODER, etc.
    - ftc://dashboard/config-pattern — @Config annotation for live tuning
 
 3. Generate the subsystem class:
@@ -264,7 +264,7 @@ Important: The class should be self-contained, testable, and follow FTC best pra
 
 Follow these steps:
 
-1. Call scan_ftc_project to find existing PID controllers and subsystem code.
+1. Call scan_project to find existing PID controllers and subsystem code.
 
 2. Read the relevant resources:
    - ftc://dashboard/config-pattern — expose PID coefficients as @Config public static
@@ -316,7 +316,7 @@ Follow these steps:
 
 Follow these steps:
 
-1. Call scan_ftc_project to analyze the full project — all OpModes, subsystems, and hardware usage.
+1. Call scan_project to analyze the full project — all OpModes, subsystems, and hardware usage.
 
 2. Read the performance resources:
    - ftc://hardware/bulk-reads — understand REV Hub bulk read caching modes
@@ -380,7 +380,7 @@ Follow these steps:
 
 Follow these steps:
 
-1. Call scan_ftc_project to find the target class and understand the current code.
+1. Call scan_project to find the target class and understand the current code.
 
 2. Read the dashboard resources:
    - ftc://dashboard/config-pattern — the @Config annotation pattern and requirements
@@ -440,7 +440,7 @@ Important: Remind the user that Dashboard serves a web UI at http://192.168.43.1
 
 Follow these steps:
 
-1. Call scan_ftc_project to analyze the current project state.
+1. Call scan_project to analyze the current project state.
 
 2. Read the command-base resources:
    - ftc://command-base/setup — SolversLib vs FTCLib, Gradle installation, import mapping
@@ -530,7 +530,7 @@ Important: Use SolversLib imports (com.seattlesolvers.solverslib.*), NOT FTCLib 
 
 Follow these steps:
 
-1. Call scan_ftc_project to check the current project state and Gradle configuration.
+1. Call scan_project to check the current project state and Gradle configuration.
 
 2. Read the development environment resource:
    - ftc://sdk/dev-environment — prerequisites (JDK 17, Android SDK, ANDROID_HOME), IDE-specific setup instructions for VS Code, Android Studio, and IntelliJ
@@ -603,7 +603,7 @@ Important: The Gradle wrapper handles everything. Android Studio is optional —
 
 Follow these steps:
 
-1. Call scan_ftc_project to check the current project state, existing vision code, and hardware names.
+1. Call scan_project to check the current project state, existing vision code, and hardware names.
 
 2. Read the vision overview to understand the options:
    - ftc://vision/overview — USB webcam vs Limelight comparison, when to use each
@@ -684,7 +684,7 @@ Important: Set manual camera controls for competition consistency. Always have a
 
 Follow these steps:
 
-1. Call scan_ftc_project to see the current Gradle configuration and what's already installed.
+1. Call scan_project to see the current Gradle configuration and what's already installed.
 
 2. Read the Gradle resources:
    - ftc://gradle/project-structure — understand which files to edit

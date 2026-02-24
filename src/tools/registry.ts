@@ -1,18 +1,28 @@
+/**
+ * MCP Tool Registration — Context-Optimized
+ *
+ * Inspired by Cloudflare's Code Mode approach to reducing context window usage:
+ * - Consolidated from 6 tools → 3 tools (fewer tool definitions in context)
+ * - Compressed descriptions (no enumerated value lists in schemas)
+ * - Progressive discovery (available options returned at runtime, not upfront)
+ *
+ * Tools:
+ *   1. scan_project     — merged scan_ftc_project + scan_hardware_config
+ *   2. search_knowledge — merged search_ftc_docs + get_ftc_example + get_hardware_reference
+ *   3. validate_ftc_code — same logic, shorter description
+ */
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 
-import { PEDRO_KNOWLEDGE } from "../knowledge/pedro.js";
-import { DASHBOARD_KNOWLEDGE } from "../knowledge/dashboard.js";
-import { HARDWARE_KNOWLEDGE } from "../knowledge/hardware.js";
-import { FTC_SDK_KNOWLEDGE } from "../knowledge/ftc-sdk.js";
-import { GRADLE_KNOWLEDGE } from "../knowledge/gradle.js";
-import { ROADRUNNER_KNOWLEDGE } from "../knowledge/roadrunner.js";
-import { FTCLIB_KNOWLEDGE } from "../knowledge/ftclib.js";
-import { VISION_KNOWLEDGE } from "../knowledge/vision.js";
-import { PANELS_KNOWLEDGE } from "../knowledge/panels.js";
-import { EXAMPLES } from "../knowledge/examples.js";
+import {
+  buildSearchIndex,
+  getExample,
+  listExamples,
+  lookupDeviceReference,
+} from "../knowledge/index.js";
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
@@ -47,14 +57,14 @@ function getJavaFiles(dir: string): string[] {
 export function registerTools(server: McpServer): void {
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Tool 1: scan_ftc_project
+  // Tool 1: scan_project (merged scan_ftc_project + scan_hardware_config)
   // ══════════════════════════════════════════════════════════════════════════
 
   server.tool(
-    "scan_ftc_project",
-    "Scan an FTC Robot Controller project to detect SDK version, installed libraries, existing OpModes, hardware configuration, and project structure. Call this at the start of every coding session.",
+    "scan_project",
+    "Scan FTC project for SDK version, libraries, OpModes, hardware devices, and structure. Use at session start.",
     {
-      projectPath: z.string().describe("Path to the FTC project root directory"),
+      projectPath: z.string().describe("FTC project root path"),
     },
     async ({ projectPath }) => {
       try {
@@ -103,10 +113,9 @@ export function registerTools(server: McpServer): void {
         const teamCodeExists = fs.existsSync(teamCodeDir);
         result.teamCodeDir = teamCodeExists ? teamCodeDir : "not found";
 
-        // 5-7. Scan Java files
+        // 5. Scan Java/Kotlin files (combined from both old scan tools)
         const opModes: Array<{ name: string; type: string; file: string; extendsClass: string }> = [];
         const configClasses: Array<{ name: string; file: string }> = [];
-        const hardwareDevices: Array<{ name: string; type: string; file: string }> = [];
         const javaFiles: string[] = [];
         let usesPedro = false;
         let usesRoadRunner = false;
@@ -116,6 +125,9 @@ export function registerTools(server: McpServer): void {
         let usesPanels = false;
         let hasFollowerConstants = false;
         let hasMecanumConstants = false;
+
+        // Combined device map (includes patterns from old scan_hardware_config)
+        const deviceMap = new Map<string, { name: string; type: string; files: string[] }>();
 
         if (teamCodeExists) {
           const files = getJavaFiles(teamCodeDir);
@@ -152,57 +164,75 @@ export function registerTools(server: McpServer): void {
               }
             }
 
-            // hardwareMap.get() calls
+            // hardwareMap.get(Type.class, "name")
             const hwRegex = /hardwareMap\.get\(\s*(\w+)\.class\s*,\s*"([^"]+)"\s*\)/g;
             let hwMatch;
             while ((hwMatch = hwRegex.exec(content)) !== null) {
-              hardwareDevices.push({ name: hwMatch[2], type: hwMatch[1], file: relativePath });
+              const key = `${hwMatch[2]}::${hwMatch[1]}`;
+              if (deviceMap.has(key)) {
+                const existing = deviceMap.get(key)!;
+                if (!existing.files.includes(relativePath)) {
+                  existing.files.push(relativePath);
+                }
+              } else {
+                deviceMap.set(key, { name: hwMatch[2], type: hwMatch[1], files: [relativePath] });
+              }
             }
 
-            // Old-style hardwareMap access
-            const oldHwRegex = /hardwareMap\.\w+\.get\("([^"]+)"\)/g;
+            // Old-style: hardwareMap.dcMotor.get("name")
+            const oldHwRegex = /hardwareMap\.(\w+)\.get\("([^"]+)"\)/g;
             let oldHwMatch;
             while ((oldHwMatch = oldHwRegex.exec(content)) !== null) {
-              hardwareDevices.push({ name: oldHwMatch[1], type: "unknown", file: relativePath });
+              const key = `${oldHwMatch[2]}::${oldHwMatch[1]}`;
+              if (deviceMap.has(key)) {
+                const existing = deviceMap.get(key)!;
+                if (!existing.files.includes(relativePath)) {
+                  existing.files.push(relativePath);
+                }
+              } else {
+                deviceMap.set(key, { name: oldHwMatch[2], type: oldHwMatch[1], files: [relativePath] });
+              }
             }
 
-            // Pedro imports
+            // Pedro Constants motor name patterns
+            const pedroMotorRegex = /\.(\w+MotorName)\("([^"]+)"\)/g;
+            let pedroMatch;
+            while ((pedroMatch = pedroMotorRegex.exec(content)) !== null) {
+              const key = `${pedroMatch[2]}::DcMotorEx (Pedro ${pedroMatch[1]})`;
+              if (!deviceMap.has(key)) {
+                deviceMap.set(key, { name: pedroMatch[2], type: `DcMotorEx (Pedro ${pedroMatch[1]})`, files: [relativePath] });
+              }
+            }
+
+            // Pedro Constants device name patterns (e.g., .setDeviceName("pinpoint"))
+            const pedroDeviceRegex = /\.(?:setDeviceName|setHardwareMapName|hardwareMapName)\("([^"]+)"\)/g;
+            let pedroDevMatch;
+            while ((pedroDevMatch = pedroDeviceRegex.exec(content)) !== null) {
+              const key = `${pedroDevMatch[1]}::PedroDevice`;
+              if (!deviceMap.has(key)) {
+                deviceMap.set(key, { name: pedroDevMatch[1], type: "Pedro Localizer Device", files: [relativePath] });
+              }
+            }
+
+            // Pedro v1 static field style: FollowerConstants.leftFrontMotorName = "name"
+            const pedroStaticRegex = /(\w+MotorName)\s*=\s*"([^"]+)"/g;
+            let pedroStaticMatch;
+            while ((pedroStaticMatch = pedroStaticRegex.exec(content)) !== null) {
+              const key = `${pedroStaticMatch[2]}::DcMotorEx (Pedro ${pedroStaticMatch[1]})`;
+              if (!deviceMap.has(key)) {
+                deviceMap.set(key, { name: pedroStaticMatch[2], type: `DcMotorEx (Pedro ${pedroStaticMatch[1]})`, files: [relativePath] });
+              }
+            }
+
+            // Library imports detection
             if (content.includes("com.pedropathing")) usesPedro = true;
-
-            // Road Runner imports
             if (content.includes("com.acmerobotics.roadrunner")) usesRoadRunner = true;
-
-            // Panels imports
             if (content.includes("com.bylazar.panels") || content.includes("com.bylazar.telemetry") || content.includes("com.bylazar.configurables") || content.includes("com.bylazar.field")) usesPanels = true;
-
-            // SolversLib imports
             if (content.includes("com.seattlesolvers.solverslib")) usesSolversLib = true;
-
-            // FTCLib imports (legacy)
             if (content.includes("com.arcrobotics.ftclib")) usesFtcLib = true;
-
-            // Command-based pattern detection
-            if (content.includes("CommandOpMode") || content.includes("SubsystemBase") || content.includes("CommandBase")) {
-              usesCommandBase = true;
-            }
-
-            // Constants detection
+            if (content.includes("CommandOpMode") || content.includes("SubsystemBase") || content.includes("CommandBase")) usesCommandBase = true;
             if (content.includes("FollowerConstants")) hasFollowerConstants = true;
             if (content.includes("MecanumConstants")) hasMecanumConstants = true;
-          }
-        }
-
-        // Deduplicate hardware devices
-        const deviceMap = new Map<string, { name: string; type: string; files: string[] }>();
-        for (const dev of hardwareDevices) {
-          const key = `${dev.name}::${dev.type}`;
-          if (deviceMap.has(key)) {
-            const existing = deviceMap.get(key)!;
-            if (!existing.files.includes(dev.file)) {
-              existing.files.push(dev.file);
-            }
-          } else {
-            deviceMap.set(key, { name: dev.name, type: dev.type, files: [dev.file] });
           }
         }
 
@@ -232,397 +262,79 @@ export function registerTools(server: McpServer): void {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Tool 2: scan_hardware_config
+  // Tool 2: search_knowledge
+  //   Merged: search_ftc_docs + get_ftc_example + get_hardware_reference
+  //   Progressive discovery: tries exact match → device lookup → full-text search
   // ══════════════════════════════════════════════════════════════════════════
 
   server.tool(
-    "scan_hardware_config",
-    "Parse all Java files to extract hardware device names, types, and usage from hardwareMap.get() calls and Constants files.",
+    "search_knowledge",
+    "Search FTC knowledge base. Finds documentation, code examples, and hardware API references.",
     {
-      projectPath: z.string().describe("Path to the FTC project root directory"),
+      query: z.string().describe("Search query, example topic, or device name"),
     },
-    async ({ projectPath }) => {
-      try {
-        const teamCodeDir = path.join(
-          projectPath,
-          "TeamCode/src/main/java/org/firstinspires/ftc/teamcode"
-        );
-
-        if (!fs.existsSync(teamCodeDir)) {
-          return {
-            content: [{ type: "text" as const, text: `TeamCode directory not found at: ${teamCodeDir}\n\nMake sure projectPath points to the FTC project root.` }],
-          };
-        }
-
-        const files = getJavaFiles(teamCodeDir);
-        const deviceMap = new Map<string, { name: string; type: string; files: string[] }>();
-
-        for (const filePath of files) {
-          const content = readFileSafe(filePath);
-          if (!content) continue;
-          const relativePath = path.relative(projectPath, filePath);
-
-          // hardwareMap.get(Type.class, "name")
-          const hwRegex = /hardwareMap\.get\(\s*(\w+)\.class\s*,\s*"([^"]+)"\s*\)/g;
-          let match;
-          while ((match = hwRegex.exec(content)) !== null) {
-            const key = `${match[2]}::${match[1]}`;
-            if (deviceMap.has(key)) {
-              const existing = deviceMap.get(key)!;
-              if (!existing.files.includes(relativePath)) {
-                existing.files.push(relativePath);
-              }
-            } else {
-              deviceMap.set(key, { name: match[2], type: match[1], files: [relativePath] });
-            }
-          }
-
-          // Old-style: hardwareMap.dcMotor.get("name")
-          const oldHwRegex = /hardwareMap\.(\w+)\.get\("([^"]+)"\)/g;
-          let oldMatch;
-          while ((oldMatch = oldHwRegex.exec(content)) !== null) {
-            const key = `${oldMatch[2]}::${oldMatch[1]}`;
-            if (deviceMap.has(key)) {
-              const existing = deviceMap.get(key)!;
-              if (!existing.files.includes(relativePath)) {
-                existing.files.push(relativePath);
-              }
-            } else {
-              deviceMap.set(key, { name: oldMatch[2], type: oldMatch[1], files: [relativePath] });
-            }
-          }
-
-          // Pedro Constants motor name patterns
-          const pedroMotorRegex = /\.(\w+MotorName)\("([^"]+)"\)/g;
-          let pedroMatch;
-          while ((pedroMatch = pedroMotorRegex.exec(content)) !== null) {
-            const key = `${pedroMatch[2]}::DcMotorEx (Pedro ${pedroMatch[1]})`;
-            if (!deviceMap.has(key)) {
-              deviceMap.set(key, { name: pedroMatch[2], type: `DcMotorEx (Pedro ${pedroMatch[1]})`, files: [relativePath] });
-            }
-          }
-
-          // Pedro Constants device name patterns (e.g., .setDeviceName("pinpoint"))
-          const pedroDeviceRegex = /\.(?:setDeviceName|setHardwareMapName|hardwareMapName)\("([^"]+)"\)/g;
-          let pedroDevMatch;
-          while ((pedroDevMatch = pedroDeviceRegex.exec(content)) !== null) {
-            const key = `${pedroDevMatch[1]}::PedroDevice`;
-            if (!deviceMap.has(key)) {
-              deviceMap.set(key, { name: pedroDevMatch[1], type: "Pedro Localizer Device", files: [relativePath] });
-            }
-          }
-
-          // Pedro v1 static field style: FollowerConstants.leftFrontMotorName = "name"
-          const pedroStaticRegex = /(\w+MotorName)\s*=\s*"([^"]+)"/g;
-          let pedroStaticMatch;
-          while ((pedroStaticMatch = pedroStaticRegex.exec(content)) !== null) {
-            const key = `${pedroStaticMatch[2]}::DcMotorEx (Pedro ${pedroStaticMatch[1]})`;
-            if (!deviceMap.has(key)) {
-              deviceMap.set(key, { name: pedroStaticMatch[2], type: `DcMotorEx (Pedro ${pedroStaticMatch[1]})`, files: [relativePath] });
-            }
-          }
-        }
-
-        const devices = Array.from(deviceMap.values());
-
+    async ({ query }) => {
+      // 1. Try exact match as a code example topic
+      const example = getExample(query);
+      if (example) {
         return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({ devices, totalFiles: files.length }, null, 2),
-          }],
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: "text" as const, text: `Error scanning hardware config: ${message}` }],
+          content: [{ type: "text" as const, text: `[Example: ${query}]\n\n${example}` }],
         };
       }
-    }
-  );
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Tool 3: search_ftc_docs
-  // ══════════════════════════════════════════════════════════════════════════
-
-  server.tool(
-    "search_ftc_docs",
-    "Search the FTC knowledge base for documentation matching a query. Returns the most relevant sections.",
-    {
-      query: z.string().describe("Search query"),
-      category: z.string().optional().describe("Category filter: sdk, pedro, roadrunner, dashboard, panels, gradle, hardware, performance, command-base, ftclib, vision, all. Covers build/deploy, IDE setup, ADB, dev environment, VisionPortal, AprilTag, Limelight, color detection, vision optimization, and Panels dashboard."),
-    },
-    async ({ query, category }) => {
-      // Build search index from all knowledge modules
-      const index: Array<{ category: string; key: string; content: string }> = [];
-
-      for (const [key, content] of Object.entries(FTC_SDK_KNOWLEDGE)) {
-        index.push({ category: "sdk", key, content });
-      }
-      for (const [key, content] of Object.entries(PEDRO_KNOWLEDGE)) {
-        index.push({ category: "pedro", key, content });
-      }
-      for (const [key, content] of Object.entries(DASHBOARD_KNOWLEDGE)) {
-        index.push({ category: "dashboard", key, content });
-      }
-      for (const [key, content] of Object.entries(HARDWARE_KNOWLEDGE)) {
-        index.push({ category: "hardware", key, content });
-      }
-      for (const [key, content] of Object.entries(GRADLE_KNOWLEDGE)) {
-        index.push({ category: "gradle", key, content });
-      }
-      for (const [key, content] of Object.entries(ROADRUNNER_KNOWLEDGE)) {
-        index.push({ category: "roadrunner", key, content });
-      }
-      for (const [key, content] of Object.entries(FTCLIB_KNOWLEDGE)) {
-        index.push({ category: "command-base", key, content });
-      }
-      for (const [key, content] of Object.entries(VISION_KNOWLEDGE)) {
-        index.push({ category: "vision", key, content });
-      }
-      for (const [key, content] of Object.entries(PANELS_KNOWLEDGE)) {
-        index.push({ category: "panels", key, content });
+      // 2. Try hardware/vision device reference lookup
+      const reference = lookupDeviceReference(query);
+      if (reference) {
+        return {
+          content: [{ type: "text" as const, text: reference }],
+        };
       }
 
-      // Split query into lowercase words
+      // 3. Full-text search across all knowledge
+      const index = buildSearchIndex();
       const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
 
-      // Score each entry
-      let scored = index.map(entry => {
+      const scored = index.map(entry => {
         const contentLower = entry.content.toLowerCase();
         let score = 0;
         for (const word of queryWords) {
-          if (contentLower.includes(word)) {
-            score++;
-          }
+          if (contentLower.includes(word)) score++;
         }
         return { ...entry, score };
       });
 
-      // Filter by category if specified
-      if (category && category !== "all") {
-        scored = scored.filter(entry => entry.category === category);
-      }
-
-      // Sort by score descending
       scored.sort((a, b) => b.score - a.score);
-
-      // Return top 3
       const top = scored.slice(0, 3).filter(entry => entry.score > 0);
 
-      if (top.length === 0) {
+      if (top.length > 0) {
+        const results = top.map((entry, i) =>
+          `--- Result ${i + 1} [${entry.category}/${entry.key}] (score: ${entry.score}/${queryWords.length}) ---\n\n${entry.content}`
+        ).join("\n\n");
         return {
-          content: [{
-            type: "text" as const,
-            text: `No matches found for query: "${query}"${category ? ` in category: ${category}` : ""}.\n\nAvailable categories: sdk, pedro, roadrunner, dashboard, panels, gradle, hardware, ftclib, vision, all`,
-          }],
+          content: [{ type: "text" as const, text: results }],
         };
       }
 
-      const results = top.map((entry, i) =>
-        `--- Result ${i + 1} [${entry.category}/${entry.key}] (score: ${entry.score}/${queryWords.length}) ---\n\n${entry.content}`
-      ).join("\n\n");
-
-      return {
-        content: [{ type: "text" as const, text: results }],
-      };
-    }
-  );
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // Tool 4: get_ftc_example
-  // ══════════════════════════════════════════════════════════════════════════
-
-  server.tool(
-    "get_ftc_example",
-    "Get a complete, compilable Java code example for an FTC topic. Returns a full working file.",
-    {
-      topic: z.string().describe("Example topic: pedro-auto, pedro-teleop, pedro-constants, dashboard-config, bulk-reads, subsystem, pid-tuning, vision-pipeline, custom-pid-drive, field-centric-drive, command-teleop, command-auto, command-subsystem"),
-    },
-    async ({ topic }) => {
-      const example = EXAMPLES[topic];
-
-      if (example) {
-        return {
-          content: [{ type: "text" as const, text: example }],
-        };
-      }
-
-      const available = Object.keys(EXAMPLES).join(", ");
+      // 4. Nothing found — return available options (progressive discovery)
+      const examples = listExamples();
       return {
         content: [{
           type: "text" as const,
-          text: `Example not found for topic: "${topic}".\n\nAvailable topics: ${available}`,
+          text: `No matches for: "${query}"\n\nTry:\n- Example topics: ${examples.join(", ")}\n- Device names: DcMotorEx, Servo, IMU, Pinpoint, OTOS, Limelight, bulk-reads, vision, etc.\n- Search terms: "pedro pathing", "dashboard setup", "vision pipeline", etc.`,
         }],
       };
     }
   );
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Tool 5: get_hardware_reference
-  // ══════════════════════════════════════════════════════════════════════════
-
-  server.tool(
-    "get_hardware_reference",
-    "Get the complete API reference for a specific FTC hardware device or system.",
-    {
-      device: z.string().describe("Hardware device or system: DcMotorEx, Servo, CRServo, IMU, Pinpoint, OTOS, Limelight, ColorSensor, DistanceSensor, TouchSensor, bulk-reads, caching-hardware, custom-wrappers, encoders, rev-hub, vision, visionportal, apriltag, camera-controls, megatag, color-detection, vision-optimization, multi-camera"),
-    },
-    async ({ device }) => {
-      const deviceLower = device.toLowerCase();
-
-      // Hardware knowledge lookups
-      const hwMapping: Record<string, string[]> = {
-        "dcmotor":          ["motorsApi", "motorRunModes", "motorSpecs"],
-        "dcmotorex":        ["motorsApi", "motorRunModes", "motorSpecs"],
-        "motor":            ["motorsApi", "motorRunModes", "motorSpecs"],
-        "motors":           ["motorsApi", "motorRunModes", "motorSpecs"],
-        "servo":            ["servosApi"],
-        "crservo":          ["servosApi"],
-        "imu":              ["sensorsImu"],
-        "pinpoint":         ["pinpoint"],
-        "otos":             ["otos"],
-        "colorsensor":      ["sensorsColor"],
-        "distancesensor":   ["sensorsDistance"],
-        "distance":         ["sensorsDistance"],
-        "touchsensor":      ["sensorsDigital"],
-        "touch":            ["sensorsDigital"],
-        "digital":          ["sensorsDigital"],
-        "bulk-reads":       ["bulkReads"],
-        "bulkread":         ["bulkReads"],
-        "bulkreads":        ["bulkReads"],
-        "bulk-read":        ["bulkReads"],
-        "caching":          ["cachingHardware"],
-        "caching-hardware": ["cachingHardware"],
-        "cachinghardware":  ["cachingHardware"],
-        "custom-wrappers":  ["customWrappers"],
-        "wrappers":         ["customWrappers"],
-        "customwrappers":   ["customWrappers"],
-        "encoder":          ["sensorsEncoder"],
-        "encoders":         ["sensorsEncoder"],
-        "rev-hub":          ["revHub"],
-        "revhub":           ["revHub"],
-        "lynx":             ["revHub"],
-        "optimization":     ["optimizationSummary"],
-        "pipeline":         ["commandPipeline"],
-        "command-pipeline": ["commandPipeline"],
-        "commandpipeline":  ["commandPipeline"],
-        "lynxcommand":      ["commandPipeline"],
-        "lynx-command":     ["commandPipeline"],
-        "usb":              ["commandPipeline"],
-        "write-optimization": ["writeOptimization"],
-        "writeoptimization":  ["writeOptimization"],
-        "write-caching":    ["writeOptimization", "cachingHardware"],
-        "queueing":         ["commandPipeline", "writeOptimization"],
-        "queuing":          ["commandPipeline", "writeOptimization"],
-        "loop-time":        ["loopTimeBudget"],
-        "looptime":         ["loopTimeBudget"],
-        "loop-budget":      ["loopTimeBudget"],
-        "performance":      ["optimizationSummary", "commandPipeline", "writeOptimization", "loopTimeBudget"],
-      };
-
-      // Vision knowledge lookups
-      const visionMapping: Record<string, string[]> = {
-        "vision":               ["overview", "visionPortalSetup", "aprilTagDetection"],
-        "visionportal":         ["visionPortalSetup"],
-        "vision-portal":        ["visionPortalSetup"],
-        "apriltag":             ["aprilTagDetection"],
-        "april-tag":            ["aprilTagDetection"],
-        "camera":               ["cameraControls"],
-        "camera-controls":      ["cameraControls"],
-        "cameracontrols":       ["cameraControls"],
-        "exposure":             ["cameraControls"],
-        "gain":                 ["cameraControls"],
-        "focus":                ["cameraControls"],
-        "white-balance":        ["cameraControls"],
-        "whitebalance":         ["cameraControls"],
-        "limelight":            ["limelight", "megaTag"],
-        "limelight3a":          ["limelight", "megaTag"],
-        "limelight-3a":         ["limelight", "megaTag"],
-        "megatag":              ["megaTag"],
-        "megatag2":             ["megaTag"],
-        "mega-tag":             ["megaTag"],
-        "localization":         ["megaTag"],
-        "color-detection":      ["colorDetection"],
-        "colordetection":       ["colorDetection"],
-        "color-detect":         ["colorDetection"],
-        "hsv":                  ["colorDetection"],
-        "opencv":               ["colorDetection"],
-        "contour":              ["colorDetection"],
-        "visionprocessor":      ["colorDetection"],
-        "vision-processor":     ["colorDetection"],
-        "vision-optimization":  ["visionOptimization"],
-        "visionoptimization":   ["visionOptimization"],
-        "decimation":           ["visionOptimization", "aprilTagDetection"],
-        "fps":                  ["visionOptimization"],
-        "resolution":           ["visionOptimization"],
-        "motion-blur":          ["visionOptimization", "cameraControls"],
-        "multi-camera":         ["multiCamera"],
-        "multicamera":          ["multiCamera"],
-        "dual-camera":          ["multiCamera"],
-        "dualcamera":           ["multiCamera"],
-        "multiportal":          ["multiCamera"],
-        "vision-patterns":      ["visionPatterns"],
-        "visionpatterns":       ["visionPatterns"],
-        "drive-to-tag":         ["visionPatterns"],
-        "init-detection":       ["visionPatterns"],
-        "snapscript":           ["megaTag"],
-        "python-pipeline":      ["megaTag"],
-      };
-
-      // Check hardware knowledge first
-      const hwKeys = hwMapping[deviceLower];
-      if (hwKeys) {
-        const hw = HARDWARE_KNOWLEDGE as Record<string, string>;
-        const sections = hwKeys.map(k => hw[k]).filter(Boolean);
-        return {
-          content: [{ type: "text" as const, text: sections.join("\n\n---\n\n") }],
-        };
-      }
-
-      // Check vision knowledge
-      const visionKeys = visionMapping[deviceLower];
-      if (visionKeys) {
-        const vis = VISION_KNOWLEDGE as Record<string, string>;
-        const sections = visionKeys.map(k => vis[k]).filter(Boolean);
-        return {
-          content: [{ type: "text" as const, text: sections.join("\n\n---\n\n") }],
-        };
-      }
-
-      const availableDevices = [
-        "DcMotorEx / motor", "Servo / CRServo", "IMU",
-        "Pinpoint", "OTOS", "Limelight",
-        "ColorSensor", "DistanceSensor", "TouchSensor",
-        "bulk-reads", "caching-hardware", "custom-wrappers",
-        "encoders", "rev-hub", "optimization",
-        "command-pipeline / queueing", "write-optimization", "loop-time / performance",
-        "vision / visionportal / apriltag",
-        "camera-controls / exposure / focus / white-balance",
-        "limelight / megatag / megatag2",
-        "color-detection / hsv / opencv / contour",
-        "vision-optimization / decimation / fps / resolution",
-        "multi-camera / dual-camera",
-        "vision-patterns / drive-to-tag / init-detection",
-      ];
-      return {
-        content: [{
-          type: "text" as const,
-          text: `No reference found for device: "${device}".\n\nAvailable devices:\n${availableDevices.map(d => `  - ${d}`).join("\n")}`,
-        }],
-      };
-    }
-  );
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // Tool 6: validate_ftc_code
+  // Tool 3: validate_ftc_code (same validation logic, compressed description)
   // ══════════════════════════════════════════════════════════════════════════
 
   server.tool(
     "validate_ftc_code",
-    "Check FTC Java code for common mistakes: wrong APIs, missing update() calls, caching @Config values, wrong patterns.",
+    "Validate FTC Java code for common mistakes and anti-patterns.",
     {
       code: z.string().describe("Java code to validate"),
-      context: z.string().optional().describe("Additional context about the code"),
     },
     async ({ code }) => {
       const issues: string[] = [];
@@ -639,14 +351,9 @@ export function registerTools(server: McpServer): void {
 
       // 2. @Config vars cached in instance field (assigned in constructor or init)
       if (code.includes("@Config")) {
-        // Look for patterns like: this.something = STATIC_FIELD or instanceField = ClassName.STATIC
-        // in init() or constructor contexts
-        const cachePattern = /(?:this\.\w+\s*=\s*\w+\.\w+|(?:private|protected)\s+\w+\s+\w+\s*=\s*\w+\.\w+)\s*;/;
-        // More specific: look for instance field assignment from a static in init() or constructor
         const initBlock = code.match(/(?:public\s+void\s+init\s*\(\)|public\s+\w+\s*\([^)]*\)\s*\{)([\s\S]*?)(?:\n\s*\}|\n\s*public)/);
         if (initBlock) {
           const initContent = initBlock[1];
-          // Check if init assigns static-looking values to instance fields
           if (/\w+\s*=\s*[A-Z][A-Z_]+/.test(initContent)) {
             issues.push(
               "[WARNING] Possible copy semantics issue: @Config values appear to be cached in init(). Read @Config static fields at point of use in loop() so dashboard edits take effect immediately."
@@ -678,9 +385,6 @@ export function registerTools(server: McpServer): void {
       if (rtpIndex !== -1) {
         const beforeRtp = code.substring(0, rtpIndex);
         const lastSetTarget = beforeRtp.lastIndexOf("setTargetPosition");
-        const lastSetMode = beforeRtp.lastIndexOf("setMode");
-        // If setTargetPosition doesn't appear before RUN_TO_POSITION, or the last setMode is more
-        // recent than the last setTargetPosition, flag it
         if (lastSetTarget === -1) {
           issues.push(
             "[ERROR] Must call setTargetPosition() BEFORE setMode(RUN_TO_POSITION). The motor needs a target before entering RUN_TO_POSITION mode."
@@ -719,14 +423,12 @@ export function registerTools(server: McpServer): void {
       }
 
       // 9. Gamepad Y axis not negated
-      // Look for direct use of gamepad*.left_stick_y for forward/drive power without negation
       const gamepadYDirectRegex = /(?:drive|forward|y|power)\s*=\s*gamepad[12]\.left_stick_y\b/;
       if (gamepadYDirectRegex.test(code)) {
         issues.push(
           "[WARNING] Gamepad Y axis is inverted in FTC — pushing the stick forward returns a negative value. Use -gamepad1.left_stick_y for intuitive forward control."
         );
       }
-      // Also check for setPower(gamepad1.left_stick_y) pattern directly on motors
       if (/\.setPower\(\s*gamepad[12]\.left_stick_y\s*\)/.test(code)) {
         issues.push(
           "[WARNING] Gamepad Y axis is inverted — use -gamepad1.left_stick_y for forward. Currently passing raw (inverted) value to setPower()."
@@ -754,7 +456,7 @@ export function registerTools(server: McpServer): void {
         );
       }
 
-      // 12. SubsystemBase without register() or addRequirements()
+      // 12. SubsystemBase without register()
       if (
         code.includes("extends SubsystemBase") &&
         !code.includes("register(") &&

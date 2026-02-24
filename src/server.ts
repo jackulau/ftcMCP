@@ -6,7 +6,7 @@ import { registerPrompts } from "./prompts/registry.js";
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "ftc-mcp",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   registerResources(server);
