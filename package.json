@@ -6,12 +6,22 @@
   "bin": {
     "ftc-mcp": "build/index.js"
   },
+  "files": [
+    "build/"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
   },
   "keywords": ["ftc", "mcp", "robotics", "first-tech-challenge", "pedro-pathing", "ftc-dashboard"],
+  "author": "Jack Lau",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackulau/ftcMCP.git"
+  },
+  "homepage": "https://github.com/jackulau/ftcMCP#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
